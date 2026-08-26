@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Pipeline Risk Monitor — SCADA Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-brand">
+    <span class="mark">SCADA</span>
+    <h1>Pipeline Risk Monitor</h1>
+    <span class="sub">Gas distribution network — real-time leak &amp; anomaly risk</span>
+  </div>
+  <div class="topbar-status">
+    <span class="clock" id="clock">--:--:--</span>
+    <span class="stat"><b id="stat-segments">--</b> segments</span>
+    <span class="stat"><b id="stat-auc">--</b> holdout AUC</span>
+  </div>
+</header>
+
+<nav class="tabs">
+  <button class="tab-btn active" data-view="monitor">Live Monitor</button>
+  <button class="tab-btn" data-view="whatif">What-If Simulator</button>
+  <button class="tab-btn" data-view="model">Model Performance</button>
+</nav>
+
+<!-- ============================================================ -->
+<!-- VIEW 1 — Live Monitor                                          -->
+<!-- ============================================================ -->
+<section class="view active" id="view-monitor">
+  <div class="monitor-grid">
+
+    <!-- left rail: segment picker -->
+    <div class="panel">
+      <div class="panel-head"><h2>Pipeline Segments</h2></div>
+      <div id="segment-list"></div>
+    </div>
+
+    <!-- center: schematic, gauge, readouts, timeline -->
+    <div class="center-col">
+
+      <div class="panel">
+        <div class="panel-head">
+          <h2>Segment <span id="schematic-segid">—</span> Schematic</h2>
+          <span class="tick-label" id="schematic-ts">—</span>
+        </div>
+        <div class="schematic-wrap" id="schematic-holder"></div>
+        <div class="schematic-caption">inlet → valve → pump → compressor → outlet (live state)</div>
+      </div>
+
+      <div class="panel risk-row" style="padding: 0;">
+        <div class="gauge-wrap">
+          <svg id="gauge-svg" viewBox="0 0 200 120" width="200" height="120">
+            <path d="M 20 110 A 80 80 0 0 1 180 110" fill="none" stroke="#2a3341" stroke-width="14" stroke-linecap="round"/>
+            <path id="gauge-arc" d="M 20 110 A 80 80 0 0 1 180 110" fill="none" stroke="#45b880" stroke-width="14" stroke-linecap="round"
+                  stroke-dasharray="251.2" stroke-dashoffset="251.2"/>
+          </svg>
+          <div class="risk-number"><span id="risk-value">0</span><span class="risk-unit">%</span></div>
+          <div class="alert-pill normal" id="alert-pill">Normal</div>
+        </div>
+        <div class="readout-grid" id="readout-grid"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head"><h2>Risk Score Timeline</h2></div>
+        <div class="chart-wrap"><canvas id="risk-chart"></canvas></div>
+        <div class="playback-bar">
+          <button class="play-btn" id="play-btn">▶</button>
+          <input type="range" id="scrub" min="0" max="0" value="0" step="1">
+          <span class="tick-label" id="scrub-label">reading 0 / 0</span>
+          <select class="speed-select" id="speed-select">
+            <option value="900">0.5×</option>
+            <option value="450" selected>1×</option>
+            <option value="220">2×</option>
+            <option value="90">4×</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <!-- right rail: contributing factors -->
+    <div class="panel">
+      <div class="panel-head"><h2>Top Contributing Factors</h2></div>
+      <div class="panel-body" id="factors-list">
+        <p style="color:var(--text-dim); font-size:12px;">Select a segment to see live SHAP attribution.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<!-- VIEW 2 — What-If Simulator                                    -->
+<!-- ============================================================ -->
+<section class="view" id="view-whatif">
+  <div class="whatif-grid">
+    <div class="panel">
+      <div class="panel-head"><h2>Manual Reading</h2></div>
+      <div class="panel-body">
+
+        <div class="toggle-row">
+          <input type="checkbox" id="wi-use-history">
+          <label for="wi-use-history">Borrow recent history from a real segment (recommended — gives accurate rolling/volatility features)</label>
+        </div>
+        <div class="field" id="wi-segment-field" style="display:none;">
+          <label>Reference segment</label>
+          <select id="wi-segment"></select>
+        </div>
+
+        <div class="field">
+          <label>Pressure <span class="val"><span id="wi-pressure-val">76</span> bar</span></label>
+          <input type="range" id="wi-pressure" min="40" max="180" step="0.5" value="76">
+        </div>
+        <div class="field">
+          <label>Flow Rate <span class="val"><span id="wi-flow-val">4.4</span> m³/s</span></label>
+          <input type="range" id="wi-flow" min="0" max="8" step="0.1" value="4.4">
+        </div>
+        <div class="field">
+          <label>Temperature <span class="val"><span id="wi-temp-val">32</span> °C</span></label>
+          <input type="range" id="wi-temp" min="20" max="55" step="0.5" value="32">
+        </div>
+        <div class="field">
+          <label>Pump Speed <span class="val"><span id="wi-pumpspeed-val">1300</span> RPM</span></label>
+          <input type="range" id="wi-pumpspeed" min="0" max="1800" step="10" value="1300">
+        </div>
+        <div class="field">
+          <label>Energy Consumption <span class="val"><span id="wi-energy-val">27</span> kW</span></label>
+          <input type="range" id="wi-energy" min="0" max="65" step="0.5" value="27">
+        </div>
+        <div class="field">
+          <label>Valve Status</label>
+          <select id="wi-valve">
+            <option value="1">Open</option>
+            <option value="0">Closed</option>
+            <option value="2">Partial</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Pump State</label>
+          <select id="wi-pump-state">
+            <option value="1">Running</option>
+            <option value="0">Off</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Compressor State</label>
+          <select id="wi-compressor-state">
+            <option value="1">Running</option>
+            <option value="0">Off</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Existing Threshold Alarm</label>
+          <select id="wi-alarm">
+            <option value="0">Not triggered</option>
+            <option value="1">Triggered</option>
+          </select>
+        </div>
+
+        <button class="primary-btn" id="wi-predict-btn">Score this reading</button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head"><h2>Predicted Risk</h2></div>
+      <div class="whatif-result" id="wi-result">
+        Set the sensor readings on the left and click "Score this reading" to see the model's risk assessment.
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<!-- VIEW 3 — Model Performance                                    -->
+<!-- ============================================================ -->
+<section class="view" id="view-model">
+  <div class="metrics-grid" id="metrics-grid"></div>
+
+  <div class="panel" style="margin-bottom: var(--gap);">
+    <div class="panel-head"><h2>Top Feature Importances</h2></div>
+    <div class="panel-body imp-list" id="importance-list"></div>
+  </div>
+
+  <div class="plots-grid">
+    <div class="panel">
+      <div class="panel-head"><h2>Confusion Matrix (holdout)</h2></div>
+      <div class="panel-body"><img src="{{ url_for('static', filename='img/confusion_matrix.png') }}" alt="Confusion matrix"></div>
+    </div>
+    <div class="panel">
+      <div class="panel-head"><h2>Feature Importance (chart)</h2></div>
+      <div class="panel-body"><img src="{{ url_for('static', filename='img/feature_importance.png') }}" alt="Feature importance"></div>
+    </div>
+  </div>
+</section>
+
+<script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>
