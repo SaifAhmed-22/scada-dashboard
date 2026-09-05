@@ -269,7 +269,11 @@ class SCADARiskModel:
 
         # --- batch-score every row for dashboard/history views ---
         anomaly_score, clf_proba, risk, alert = self.score_dataframe(sorted_df)
-        self.scored_history = sorted_df[["timestamp", "segment_id", "event_type", "target"]].copy()
+        history_columns = [
+            "timestamp", "segment_id", "event_type", "target",
+            "pressure", "flow_rate",
+        ]
+        self.scored_history = sorted_df[history_columns].copy()
         self.scored_history["anomaly_score"] = anomaly_score
         self.scored_history["classifier_probability"] = clf_proba
         self.scored_history["risk_score_pct"] = risk

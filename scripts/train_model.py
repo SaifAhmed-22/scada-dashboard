@@ -37,9 +37,21 @@ def main() -> None:
     parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG)
     parser.add_argument("--model", type=Path, default=DEFAULT_MODEL)
     parser.add_argument("--metrics", type=Path, default=DEFAULT_METRICS)
+    parser.add_argument(
+        "--allow-collisions",
+        action="store_true",
+        help="Train despite same-segment timestamp collisions; use only after source review.",
+    )
     args = parser.parse_args()
 
     frame, quality = prepare_scada_file(args.data, args.config, require_labels=True)
+    collisions = quality.get("timestamp_collision_rows", 0)
+    if collisions and not args.allow_collisions:
+        raise ValueError(
+            f"Refusing to train: {collisions} rows belong to ambiguous same-segment "
+            "timestamps. Repair the source data or rerun with --allow-collisions "
+            "after review."
+        )
     if frame["target"].nunique() < 2:
         raise ValueError("Training data must contain both target classes")
 

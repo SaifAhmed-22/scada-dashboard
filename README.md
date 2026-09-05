@@ -41,8 +41,15 @@ tag names and units with the official SCADA historian specification before using
 live data. Train a versioned model artifact with:
 
 ```powershell
+py scripts\audit_data.py
 py scripts\train_model.py
 ```
+
+Training stops when same-segment timestamps collide because rolling features and
+pressure gradients need unambiguous chronology. Repair the source export first.
+The current sample intentionally reports collisions; `--allow-collisions` exists
+only for an explicitly reviewed experiment and should not be used for production
+training.
 
 To serve that artifact instead of training during Flask startup, set its path:
 

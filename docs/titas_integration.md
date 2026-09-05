@@ -41,6 +41,11 @@ reading looks unusual.
 7. Evaluate chronologically and on unseen segments before live shadow mode.
 8. Keep the prediction service read-only with respect to the SCADA network.
 
+Run `py scripts/audit_data.py` before training. The training command rejects
+same-segment timestamp collisions by default because row order cannot establish
+chronology. Repair the historian export or add a true sequence field; do not
+solve the issue by averaging conflicting readings.
+
 ## Recommended deployment flow
 
 ```text

@@ -110,6 +110,7 @@ def normalize_scada_frame(
     report: dict[str, Any] = {
         "input_rows": int(len(frame)),
         "duplicate_rows_removed": 0,
+        "timestamp_collision_groups": 0,
         "timestamp_collision_rows": 0,
         "invalid_rows_removed": 0,
         "out_of_range_counts": {},
@@ -122,8 +123,10 @@ def normalize_scada_frame(
     frame = frame.sort_values(["segment_id", "timestamp"])
     frame = frame.drop_duplicates(keep="last")
     report["duplicate_rows_removed"] = int(before_duplicates - len(frame))
-    report["timestamp_collision_rows"] = int(
-        frame.duplicated(["segment_id", "timestamp"], keep=False).sum()
+    collision_mask = frame.duplicated(["segment_id", "timestamp"], keep=False)
+    report["timestamp_collision_rows"] = int(collision_mask.sum())
+    report["timestamp_collision_groups"] = int(
+        frame.loc[collision_mask].groupby(["segment_id", "timestamp"]).ngroups
     )
 
     for column in CONTINUOUS_COLUMNS + STATE_COLUMNS:

@@ -34,6 +34,7 @@ class ScadaAdapterTests(unittest.TestCase):
         normalized, report = normalize_scada_frame(frame, self.config, require_labels=True)
         self.assertEqual(len(normalized), 1)
         self.assertEqual(report["invalid_rows_removed"], 0)
+        self.assertEqual(report["timestamp_collision_rows"], 0)
         self.assertEqual(str(normalized.loc[0, "timestamp"].tz), "UTC")
 
     def test_unit_conversion_and_invalid_range_reporting(self):

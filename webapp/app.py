@@ -47,6 +47,14 @@ else:
     model = SCADARiskModel()
     model.fit(raw_df)
     model_metadata = {"source": "development_startup_training"}
+
+# Older saved artifacts did not retain raw pressure/flow context in history.
+# Backfill those display-only fields without changing model features.
+if "pressure" not in model.scored_history.columns or "flow_rate" not in model.scored_history.columns:
+    raw_history = raw_df.sort_values(["timestamp", "segment_id"], kind="stable").reset_index(drop=True)
+    if len(raw_history) == len(model.scored_history):
+        model.scored_history["pressure"] = raw_history["pressure"].to_numpy()
+        model.scored_history["flow_rate"] = raw_history["flow_rate"].to_numpy()
 model.save_report_plots(PLOTS_DIR)
 print(f"Model ready. Holdout AUC={model.metrics.get('holdout_auc')}, "
       f"CV F1={model.metrics.get('cv_f1_mean')}")
@@ -134,8 +142,6 @@ def api_segments():
 @app.route("/api/operations")
 def api_operations():
     scored = model.scored_history.sort_values("timestamp")
-    raw_context = raw_df[["timestamp", "segment_id", "pressure", "flow_rate", "event_type"]]
-    scored = scored.merge(raw_context, on=["timestamp", "segment_id"], how="left", suffixes=("", "_raw"))
     latest = scored.iloc[-1]
     alert_counts = scored["alert_level"].value_counts().to_dict()
     detection_rows = scored[scored["alert_level"] != "Normal"].tail(50).iloc[::-1]
@@ -147,7 +153,7 @@ def api_operations():
             "segment_id": int(row["segment_id"]),
             "risk_score_pct": float(row["risk_score_pct"]),
             "alert_level": row["alert_level"],
-            "event_type": row.get("event_type_raw", row.get("event_type", "unknown")),
+            "event_type": row.get("event_type", "unknown"),
             "pressure": float(row["pressure"]),
             "flow_rate": float(row["flow_rate"]),
         })
