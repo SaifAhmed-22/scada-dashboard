@@ -2,6 +2,8 @@
 
 A SCADA pipeline gas-leak risk assessment project with a Flask dashboard, time-series model, research material, and reproducible data layout.
 
+For a plain-language team overview, see [Pipeline Risk Project Guide](docs/Pipeline_Risk_Project_Guide.docx).
+
 ## Quick start
 
 From the repository root in PowerShell:
