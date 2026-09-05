@@ -48,6 +48,28 @@
     <div class="ops-metric"><span>Last scored</span><strong id="ops-time">—</strong></div>
   </div>
 
+  <div class="monitor-tools">
+    <div class="panel topology-panel">
+      <div class="panel-head">
+        <h2>Network Topology</h2>
+        <span class="demo-label" id="topology-label">DEMO SCHEMATIC</span>
+      </div>
+      <div class="topology-legend">
+        <span><i class="legend-dot normal"></i>Normal</span>
+        <span><i class="legend-dot warning"></i>Warning</span>
+        <span><i class="legend-dot critical"></i>Critical</span>
+      </div>
+      <div id="topology-map" class="topology-map"><p class="empty-state">Loading topology...</p></div>
+    </div>
+    <div class="panel quality-panel">
+      <div class="panel-head">
+        <h2>Data Quality</h2>
+        <span class="quality-state" id="quality-state">Checking</span>
+      </div>
+      <div class="quality-grid" id="quality-grid"><p class="empty-state">Loading validation report...</p></div>
+    </div>
+  </div>
+
   <div class="monitor-grid">
 
     <!-- left rail: segment picker -->

@@ -12,8 +12,10 @@ import os
 import json
 import numpy as np
 import pandas as pd
+import yaml
 from flask import Flask, Response, render_template, jsonify, request
 
+from alert_store import AlertStore
 from model_pipeline import SCADARiskModel
 from scada_adapter import prepare_scada_file
 
@@ -21,10 +23,18 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.dirname(BASE_DIR)
 DATA_PATH = os.path.join(PROJECT_ROOT, "data", "raw", "scada_pipeline.csv")
 CONFIG_PATH = os.path.join(PROJECT_ROOT, "config", "titas_scada.yml")
+TOPOLOGY_CONFIG_PATH = os.path.join(PROJECT_ROOT, "config", "demo_topology.yml")
 PLOTS_DIR = os.path.join(BASE_DIR, "static", "img")
 MODEL_ARTIFACT_PATH = os.getenv("PIPELINE_RISK_MODEL_PATH")
+ALERT_DB_PATH = os.getenv(
+    "PIPELINE_RISK_ALERT_DB",
+    os.path.join(PROJECT_ROOT, "data", "runtime", "alerts.db"),
+)
 
 app = Flask(__name__)
+alert_store = AlertStore(ALERT_DB_PATH)
+with open(TOPOLOGY_CONFIG_PATH, "r", encoding="utf-8") as topology_file:
+    topology_config = yaml.safe_load(topology_file) or {}
 
 print("Loading and validating SCADA data...")
 raw_df, data_quality = prepare_scada_file(DATA_PATH, CONFIG_PATH, require_labels=True)
@@ -142,6 +152,7 @@ def api_operations():
             "flow_rate": float(row["flow_rate"]),
         })
 
+    detections = alert_store.enrich(detections)
     payload = {
         "summary": {
             "latest_timestamp": str(latest["timestamp"]),
@@ -156,6 +167,50 @@ def api_operations():
         "segments": _segment_summary.to_dict(orient="records"),
     }
     return jsonify(_clean(payload))
+
+
+@app.route("/api/topology")
+def api_topology():
+    segments = sorted(int(value) for value in raw_df["segment_id"].unique())
+    per_row = int(topology_config.get("segments_per_row", 25))
+    segment_state = _segment_summary.set_index("segment_id").to_dict(orient="index")
+    nodes = []
+    edges = []
+    for index, segment_id in enumerate(segments):
+        row, column = divmod(index, per_row)
+        nodes.append({
+            "id": f"segment-{segment_id}",
+            "segment_id": segment_id,
+            "label": f"SEG-{segment_id:03d}",
+            "x": 34 + column * 30,
+            "y": 48 + row * 74,
+            "last_risk_score": float(segment_state[segment_id]["last_risk_score"]),
+            "last_alert_level": segment_state[segment_id]["last_alert_level"],
+        })
+        if column > 0:
+            edges.append({"from": f"segment-{segments[index - 1]}", "to": f"segment-{segment_id}"})
+    return jsonify({
+        "source": topology_config.get("source", "demo"),
+        "label": topology_config.get("label", "DEMO SCHEMATIC"),
+        "viewbox": [0, 0, 780, 190],
+        "nodes": nodes,
+        "edges": edges,
+    })
+
+
+@app.route("/api/alerts/<alert_key>/<action>", methods=["POST"])
+def api_alert_action(alert_key, action):
+    data = request.get_json(silent=True) or {}
+    try:
+        result = alert_store.update(
+            alert_key,
+            action,
+            note=str(data.get("note", "")),
+            actor=str(data.get("actor", "operator")),
+        )
+    except (KeyError, ValueError) as exc:
+        return jsonify({"error": str(exc)}), 404
+    return jsonify(result)
 
 
 @app.route("/api/export/data")

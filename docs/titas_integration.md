@@ -56,3 +56,12 @@ SCADA historian export/API
 The dashboard's development fallback trains at startup for convenience. For a
 controlled deployment, train with `scripts/train_model.py` and set
 `PIPELINE_RISK_MODEL_PATH` so serving loads the reviewed artifact instead.
+
+## Dashboard operations
+
+The dashboard now includes a demonstration topology schematic, data-quality
+status, and persistent alert actions. The schematic is intentionally not a
+geographic representation: it lays out segment IDs until an approved Titas GIS
+export is supplied. Alert acknowledgement state is stored in
+`data/runtime/alerts.db` and should be placed on protected persistent storage in
+deployment.

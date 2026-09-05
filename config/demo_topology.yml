@@ -1,0 +1,4 @@
+# Demonstration-only schematic layout. Replace with an approved Titas GIS export.
+source: demo_segment_layout
+label: DEMO SCHEMATIC - NOT GEOGRAPHIC Titas topology
+segments_per_row: 25

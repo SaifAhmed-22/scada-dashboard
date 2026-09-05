@@ -18,6 +18,7 @@ const state = {
   chart: null,
   telemetryChart: null,
   operations: null,
+  topology: null,
 };
 
 // ---------------------------------------------------------------
@@ -57,6 +58,8 @@ document.addEventListener("DOMContentLoaded", () => {
   loadMeta();
   loadSegments();
   loadOperations();
+  loadTopology();
+  setupAlertActions();
 });
 
 function startClock() {
@@ -93,6 +96,32 @@ async function loadMeta() {
     meta.model.holdout_auc !== null ? meta.model.holdout_auc.toFixed(3) : "n/a";
 
   renderModelView(meta);
+  renderDataQuality(meta.dataset.data_quality);
+}
+
+function renderDataQuality(quality) {
+  if (!quality) return;
+  const invalidRate = Number(quality.invalid_rate || 0);
+  const collisions = Number(quality.timestamp_collision_rows || 0);
+  const stateEl = document.getElementById("quality-state");
+  const needsReview = invalidRate > 0 || collisions > 0 || Number(quality.duplicate_rows_removed || 0) > 0;
+  stateEl.textContent = needsReview ? "Review required" : "Healthy";
+  stateEl.className = `quality-state ${needsReview ? "warning" : "normal"}`;
+  const missing = Object.values(quality.missing_counts || {}).reduce((sum, value) => sum + Number(value || 0), 0);
+  const outOfRange = Object.values(quality.out_of_range_counts || {}).reduce((sum, value) => sum + Number(value || 0), 0);
+  const items = [
+    ["Rows accepted", quality.output_rows],
+    ["Invalid rate", `${(invalidRate * 100).toFixed(2)}%`],
+    ["Missing values", missing],
+    ["Out of range", outOfRange],
+    ["Exact duplicates", quality.duplicate_rows_removed || 0],
+    ["Timestamp collisions", collisions],
+    ["Expected cadence", quality.expected_frequency || "—"],
+    ["Timezone", quality.timezone || "—"],
+  ];
+  document.getElementById("quality-grid").innerHTML = items
+    .map(([label, value]) => `<div class="quality-item"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div>`)
+    .join("");
 }
 
 function renderModelView(meta) {
@@ -229,8 +258,8 @@ function renderOperations(operations) {
 
   const detectionLog = document.getElementById("detection-log");
   detectionLog.innerHTML = operations.detections.length
-    ? `<table class="data-table"><thead><tr><th>Time</th><th>Segment</th><th>Risk</th><th>Alert</th><th>Event</th></tr></thead><tbody>${operations.detections
-        .map((d) => `<tr><td>${escapeHtml(d.timestamp)}</td><td>SEG-${String(d.segment_id).padStart(3, "0")}</td><td class="mono">${fmt(d.risk_score_pct, 1)}%</td><td><span class="badge ${alertClass(d.alert_level)}">${escapeHtml(d.alert_level)}</span></td><td>${escapeHtml(d.event_type)}</td></tr>`)
+    ? `<table class="data-table"><thead><tr><th>Time</th><th>Segment</th><th>Risk</th><th>Alert</th><th>Event</th><th>Status</th><th>Action</th></tr></thead><tbody>${operations.detections
+        .map((d) => `<tr><td>${escapeHtml(d.timestamp)}</td><td>SEG-${String(d.segment_id).padStart(3, "0")}</td><td class="mono">${fmt(d.risk_score_pct, 1)}%</td><td><span class="badge ${alertClass(d.alert_level)}">${escapeHtml(d.alert_level)}</span></td><td>${escapeHtml(d.event_type)}</td><td><span class="status-text ${escapeHtml(d.status)}">${escapeHtml(d.status || "open")}</span></td><td>${alertActionHtml(d)}</td></tr>`)
         .join("")}</tbody></table>`
     : `<p class="empty-state">No warnings or critical readings recorded.</p>`;
 
@@ -238,6 +267,64 @@ function renderOperations(operations) {
   document.getElementById("segment-overview").innerHTML = `<table class="data-table"><thead><tr><th>Segment</th><th>Latest risk</th><th>Max risk</th><th>Incidents</th><th>Status</th></tr></thead><tbody>${overview
     .map((s) => `<tr><td class="mono">SEG-${String(s.segment_id).padStart(3, "0")}</td><td class="mono">${fmt(s.last_risk_score, 1)}%</td><td class="mono">${fmt(s.max_risk_score, 1)}%</td><td>${s.num_incidents}</td><td><span class="badge ${alertClass(s.last_alert_level)}">${escapeHtml(s.last_alert_level)}</span></td></tr>`)
     .join("")}</tbody></table>`;
+}
+
+function alertActionHtml(detection) {
+  if (detection.status === "resolved" || detection.status === "false_positive") return "—";
+  const action = detection.status === "acknowledged" ? "resolve" : "acknowledge";
+  const label = action === "resolve" ? "Resolve" : "Acknowledge";
+  return `<button class="table-action" data-alert-key="${escapeHtml(detection.alert_key)}" data-alert-action="${action}">${label}</button>`;
+}
+
+function setupAlertActions() {
+  document.getElementById("detection-log").addEventListener("click", async (event) => {
+    const button = event.target.closest("[data-alert-key]");
+    if (!button) return;
+    button.disabled = true;
+    try {
+      const response = await fetch(`/api/alerts/${button.dataset.alertKey}/${button.dataset.alertAction}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ actor: "dashboard-operator" }),
+      });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      await loadOperations();
+    } catch (error) {
+      button.disabled = false;
+      window.alert(`Alert update failed: ${error.message}`);
+    }
+  });
+}
+
+async function loadTopology() {
+  try {
+    const response = await fetch("/api/topology");
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    state.topology = await response.json();
+    renderTopology(state.topology);
+  } catch (error) {
+    document.getElementById("topology-map").innerHTML = `<p class="empty-state">Topology unavailable: ${escapeHtml(error.message)}</p>`;
+  }
+}
+
+function renderTopology(topology) {
+  document.getElementById("topology-label").textContent = topology.label;
+  const nodes = topology.nodes;
+  const byId = Object.fromEntries(nodes.map((node) => [node.id, node]));
+  const edges = topology.edges
+    .map((edge) => {
+      const from = byId[edge.from];
+      const to = byId[edge.to];
+      return `<line x1="${from.x}" y1="${from.y}" x2="${to.x}" y2="${to.y}" class="topology-edge"/>`;
+    })
+    .join("");
+  const points = nodes
+    .map((node) => `<g class="topology-node" data-segment="${node.segment_id}"><circle cx="${node.x}" cy="${node.y}" r="8" class="${alertClass(node.last_alert_level)}"/><text x="${node.x}" y="${node.y + 21}">${escapeHtml(node.label)}</text></g>`)
+    .join("");
+  document.getElementById("topology-map").innerHTML = `<svg viewBox="${topology.viewbox.join(" ")}" role="img" aria-label="${escapeHtml(topology.label)}">${edges}${points}</svg>`;
+  document.querySelectorAll(".topology-node").forEach((node) => {
+    node.addEventListener("click", () => selectSegment(parseInt(node.dataset.segment, 10)));
+  });
 }
 
 // ---------------------------------------------------------------
