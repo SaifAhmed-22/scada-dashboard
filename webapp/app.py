@@ -17,7 +17,8 @@ from flask import Flask, render_template, jsonify, request
 from model_pipeline import SCADARiskModel
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DATA_PATH = os.path.join(BASE_DIR, "scada_pipeline.csv")
+PROJECT_ROOT = os.path.dirname(BASE_DIR)
+DATA_PATH = os.path.join(PROJECT_ROOT, "data", "raw", "scada_pipeline.csv")
 PLOTS_DIR = os.path.join(BASE_DIR, "static", "img")
 
 app = Flask(__name__)
