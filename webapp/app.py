@@ -15,18 +15,28 @@ import pandas as pd
 from flask import Flask, Response, render_template, jsonify, request
 
 from model_pipeline import SCADARiskModel
+from scada_adapter import prepare_scada_file
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.dirname(BASE_DIR)
 DATA_PATH = os.path.join(PROJECT_ROOT, "data", "raw", "scada_pipeline.csv")
+CONFIG_PATH = os.path.join(PROJECT_ROOT, "config", "titas_scada.yml")
 PLOTS_DIR = os.path.join(BASE_DIR, "static", "img")
+MODEL_ARTIFACT_PATH = os.getenv("PIPELINE_RISK_MODEL_PATH")
 
 app = Flask(__name__)
 
-print("Loading SCADA data and training model (this runs once at startup)...")
-raw_df = pd.read_csv(DATA_PATH, parse_dates=["timestamp"])
-model = SCADARiskModel()
-model.fit(raw_df)
+print("Loading and validating SCADA data...")
+raw_df, data_quality = prepare_scada_file(DATA_PATH, CONFIG_PATH, require_labels=True)
+if MODEL_ARTIFACT_PATH and os.path.exists(MODEL_ARTIFACT_PATH):
+    print(f"Loading persisted model artifact: {MODEL_ARTIFACT_PATH}")
+    model, model_metadata = SCADARiskModel.load_artifact(MODEL_ARTIFACT_PATH)
+    model.raw_df = raw_df
+else:
+    print("No model artifact configured; training development model at startup...")
+    model = SCADARiskModel()
+    model.fit(raw_df)
+    model_metadata = {"source": "development_startup_training"}
 model.save_report_plots(PLOTS_DIR)
 print(f"Model ready. Holdout AUC={model.metrics.get('holdout_auc')}, "
       f"CV F1={model.metrics.get('cv_f1_mean')}")
@@ -77,6 +87,7 @@ def api_meta():
             "time_start": str(raw_df["timestamp"].min()),
             "time_end": str(raw_df["timestamp"].max()),
             "event_type_counts": raw_df["event_type"].value_counts().to_dict(),
+            "data_quality": data_quality,
         },
         "model": {
             "uses_xgboost": model.has_xgboost,

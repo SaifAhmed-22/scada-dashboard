@@ -14,3 +14,4 @@ webapp/static/img/*.png
 
 # Local data exports and model artifacts
 artifacts/generated/
+artifacts/models/

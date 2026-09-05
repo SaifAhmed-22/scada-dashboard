@@ -34,6 +34,31 @@ py scripts\scada_risk_model.py
 
 The standalone script resolves the dataset relative to the repository, so it can be run from any working directory.
 
+## Validated model training
+
+The Titas adapter is configured in `config/titas_scada.yml`. Replace its source
+tag names and units with the official SCADA historian specification before using
+live data. Train a versioned model artifact with:
+
+```powershell
+py scripts\train_model.py
+```
+
+To serve that artifact instead of training during Flask startup, set its path:
+
+```powershell
+$env:PIPELINE_RISK_MODEL_PATH = "D:\path\to\pipeline_risk_model.pkl"
+py webapp\app.py
+```
+
+Without `PIPELINE_RISK_MODEL_PATH`, the app retains development-mode startup
+training against the validated CSV.
+
+The adapter normalizes timestamps to UTC, converts configured units, removes
+duplicate and invalid rows, and reports data-quality counts. Quality flags are
+kept outside the model feature matrix so sensor failures are not mistaken for
+leaks.
+
 ## Deployment
 
 The root `Procfile` uses Gunicorn with `webapp` as its working directory:

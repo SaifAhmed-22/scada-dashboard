@@ -8,6 +8,9 @@
 import warnings
 warnings.filterwarnings("ignore")
 
+import pickle
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
 import matplotlib
@@ -77,6 +80,28 @@ class SCADARiskModel:
         self.metrics = {}
         self.raw_df = None
         self.scored_history = None  # every training row, batch-scored, for dashboards
+
+    def save_artifact(self, path, metadata=None):
+        """Persist fitted model state without serializing the SHAP explainer."""
+        artifact_path = Path(path)
+        artifact_path.parent.mkdir(parents=True, exist_ok=True)
+        explainer = self.shap_explainer
+        self.shap_explainer = None
+        try:
+            with artifact_path.open("wb") as handle:
+                pickle.dump({"model": self, "metadata": metadata or {}}, handle)
+        finally:
+            self.shap_explainer = explainer
+
+    @classmethod
+    def load_artifact(cls, path):
+        artifact_path = Path(path)
+        with artifact_path.open("rb") as handle:
+            payload = pickle.load(handle)
+        model = payload["model"]
+        if model.has_shap and model.clf is not None:
+            model.shap_explainer = shap.TreeExplainer(model.clf)
+        return model, payload.get("metadata", {})
 
     # ---------------------------------------------------------------
     # Feature engineering (identical logic used at train time AND at

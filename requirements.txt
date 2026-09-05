@@ -7,3 +7,4 @@ shap>=0.44
 matplotlib>=3.7
 seaborn>=0.12
 gunicorn>=21.2.0
+PyYAML>=6.0

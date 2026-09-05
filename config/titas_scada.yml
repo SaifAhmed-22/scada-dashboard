@@ -1,0 +1,65 @@
+# Titas SCADA integration contract.
+# Replace the source tag names and units with the historian/interface specification
+# before connecting live data. The current values keep the sample dataset runnable.
+schema_version: 1
+timezone: Asia/Dhaka
+expected_frequency: 1min
+resample: false
+
+columns:
+  timestamp: timestamp
+  segment_id: segment_id
+  pressure: pressure
+  flow_rate: flow_rate
+  temperature: temperature
+  valve_status: valve_status
+  pump_state: pump_state
+  pump_speed: pump_speed
+  compressor_state: compressor_state
+  energy_consumption: energy_consumption
+  alarm_triggered: alarm_triggered
+  event_type: event_type
+  target: target
+
+units:
+  pressure: {source: bar, target: bar}
+  flow_rate: {source: m3/s, target: m3/s}
+  temperature: {source: C, target: C}
+  pump_speed: {source: rpm, target: rpm}
+  energy_consumption: {source: kW, target: kW}
+
+ranges:
+  pressure: {min: 0, max: 250}
+  flow_rate: {min: 0, max: 1000}
+  temperature: {min: -40, max: 100}
+  pump_speed: {min: 0, max: 5000}
+  energy_consumption: {min: 0, max: 10000}
+  valve_status: {allowed: [0, 1, 2]}
+  pump_state: {allowed: [0, 1]}
+  compressor_state: {allowed: [0, 1]}
+  alarm_triggered: {allowed: [0, 1]}
+
+required_for_training:
+  - timestamp
+  - segment_id
+  - pressure
+  - flow_rate
+  - temperature
+  - valve_status
+  - pump_state
+  - pump_speed
+  - compressor_state
+  - energy_consumption
+  - target
+
+required_for_inference:
+  - timestamp
+  - segment_id
+  - pressure
+  - flow_rate
+  - temperature
+  - valve_status
+  - pump_state
+  - pump_speed
+  - compressor_state
+  - energy_consumption
