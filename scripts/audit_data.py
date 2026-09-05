@@ -15,7 +15,7 @@ from scada_adapter import prepare_scada_file  # noqa: E402
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--data", type=Path, default=PROJECT_ROOT / "data/raw/scada_pipeline.csv")
+    parser.add_argument("--data", type=Path, default=PROJECT_ROOT / "data/processed/scada_pipeline_repaired.csv")
     parser.add_argument("--config", type=Path, default=PROJECT_ROOT / "config/titas_scada.yml")
     args = parser.parse_args()
 

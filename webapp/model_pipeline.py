@@ -203,8 +203,11 @@ class SCADARiskModel:
         featured_df = self.add_iqr_features(featured_df)
         sorted_df = featured_df.sort_values(["timestamp", "segment_id"]).reset_index(drop=True)
 
-        self.feature_columns = [c for c in sorted_df.columns
-                                 if c not in ("timestamp", "segment_id", "event_type", "target")]
+        non_feature_columns = {
+            "timestamp", "original_timestamp", "segment_id", "reading_sequence",
+            "collision_sequence", "event_type", "target",
+        }
+        self.feature_columns = [c for c in sorted_df.columns if c not in non_feature_columns]
 
         X_all = sorted_df[self.feature_columns].astype(float)
         y_all = sorted_df["target"].astype(int)

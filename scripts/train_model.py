@@ -17,7 +17,7 @@ from model_pipeline import SCADARiskModel  # noqa: E402
 from scada_adapter import prepare_scada_file  # noqa: E402
 
 
-DEFAULT_DATA = PROJECT_ROOT / "data" / "raw" / "scada_pipeline.csv"
+DEFAULT_DATA = PROJECT_ROOT / "data" / "processed" / "scada_pipeline_repaired.csv"
 DEFAULT_CONFIG = PROJECT_ROOT / "config" / "titas_scada.yml"
 DEFAULT_MODEL = PROJECT_ROOT / "artifacts" / "models" / "pipeline_risk_model.pkl"
 DEFAULT_METRICS = PROJECT_ROOT / "artifacts" / "models" / "pipeline_risk_metrics.json"

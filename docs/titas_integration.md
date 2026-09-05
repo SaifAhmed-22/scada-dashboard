@@ -43,8 +43,10 @@ reading looks unusual.
 
 Run `py scripts/audit_data.py` before training. The training command rejects
 same-segment timestamp collisions by default because row order cannot establish
-chronology. Repair the historian export or add a true sequence field; do not
-solve the issue by averaging conflicting readings.
+chronology. The checked-in synthetic demo has a separate repair script that
+preserves rows and offsets collision readings by seconds. For Titas data, repair
+the historian export or add a true sequence field; do not average conflicting
+readings or use the demo repair rule in production.
 
 ## Recommended deployment flow
 

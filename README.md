@@ -15,7 +15,7 @@ py webapp\app.py
 
 Open <http://127.0.0.1:5000> after the model finishes training.
 
-The app reads the canonical dataset from `data/raw/scada_pipeline.csv` and writes dashboard plots to `webapp/static/img/` at startup.
+The app reads the collision-repaired demo dataset from `data/processed/scada_pipeline_repaired.csv` and writes dashboard plots to `webapp/static/img/` at startup. The original source sample remains in `data/raw/` for provenance.
 
 ## Repository layout
 
@@ -43,15 +43,15 @@ tag names and units with the official SCADA historian specification before using
 live data. Train a versioned model artifact with:
 
 ```powershell
-py scripts\audit_data.py
+py scripts\repair_sample_timestamps.py
+py scripts\audit_data.py --data data\processed\scada_pipeline_repaired.csv
 py scripts\train_model.py
 ```
 
 Training stops when same-segment timestamps collide because rolling features and
-pressure gradients need unambiguous chronology. Repair the source export first.
-The current sample intentionally reports collisions; `--allow-collisions` exists
-only for an explicitly reviewed experiment and should not be used for production
-training.
+pressure gradients need unambiguous chronology. The demo sample has a documented
+repair script that preserves every row and offsets collisions by seconds. Real
+Titas data must use a true historian sequence or source timestamp instead.
 
 To serve that artifact instead of training during Flask startup, set its path:
 

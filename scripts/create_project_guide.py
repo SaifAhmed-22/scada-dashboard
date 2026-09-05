@@ -137,7 +137,8 @@ add_bullets(document, [
 
 add_heading(document, "4. Project Folder Structure", 1)
 add_table(document, ["Folder/file", "Purpose"], [
-    ("data/raw/", "Canonical SCADA input dataset."),
+    ("data/raw/", "Original source SCADA sample, preserved for provenance."),
+    ("data/processed/", "Collision-repaired sample used by the local demo model."),
     ("data/runtime/", "Local runtime state such as SQLite alert records; not committed to Git."),
     ("config/titas_scada.yml", "Canonical fields, source tag mapping, units, ranges, and required data."),
     ("config/demo_topology.yml", "Demo schematic layout. It is not a geographic Titas map."),
@@ -226,11 +227,11 @@ add_table(document, ["Item", "Current value"], [
     ("Engineered model features after retraining", "72"),
     ("Training rows", "840"),
     ("Chronological test rows", "160"),
-    ("Holdout AUC", "0.9938"),
+    ("Holdout AUC", "0.9926"),
     ("Holdout accuracy", "97.5%"),
-    ("Time-series CV F1", "0.876"),
+    ("Time-series CV F1", "0.892"),
 ])
-document.add_paragraph("These metrics come from the current sample dataset and should not be presented as Titas production accuracy. The sample also has 270 collision groups involving 678 rows with repeated segment timestamps. Training now stops by default until those timestamps are repaired or explicitly reviewed.")
+document.add_paragraph("These metrics come from the current sample dataset and should not be presented as Titas production accuracy. The original sample had 270 collision groups involving 678 rows with repeated segment timestamps. The processed demo copy now preserves all rows and applies documented one-second offsets within each collision group; this is a synthetic-data repair, not a substitute for a real historian sequence field.")
 
 add_heading(document, "11. How to Run the Project", 1)
 document.add_paragraph("From PowerShell, in the project root:")
@@ -238,7 +239,8 @@ code = document.add_paragraph()
 code.style = "No Spacing"
 for line in [
     "py -m pip install -r requirements.txt",
-    "py scripts\\audit_data.py",
+    "py scripts\\repair_sample_timestamps.py",
+    "py scripts\\audit_data.py --data data\\processed\\scada_pipeline_repaired.csv",
     "$env:PIPELINE_RISK_MODEL_PATH = \"D:\\ML Project\\Pipeline risk\\artifacts\\models\\pipeline_risk_model.pkl\"",
     "py webapp\\app.py",
 ]:
@@ -247,7 +249,7 @@ for line in [
     run.font.size = Pt(9)
 
 document.add_paragraph("Open http://127.0.0.1:5000 in a browser. Keep the terminal running while using the dashboard.")
-document.add_paragraph("To train a new model, repair the timestamp collisions first, then run py scripts\\train_model.py. The command intentionally refuses ambiguous chronology by default.")
+document.add_paragraph("To train a new model, run the sample repair script first, then run py scripts\\train_model.py. For real Titas data, use the historian's true sequence or timestamp instead of the sample repair rule.")
 
 add_heading(document, "12. What Must Change for Real Titas Data?", 1)
 add_bullets(document, [
