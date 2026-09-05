@@ -80,6 +80,7 @@ class SCADARiskModel:
         self.metrics = {}
         self.raw_df = None
         self.scored_history = None  # every training row, batch-scored, for dashboards
+        self.iqr_bounds = {}
 
     def save_artifact(self, path, metadata=None):
         """Persist fitted model state without serializing the SHAP explainer."""
@@ -162,6 +163,29 @@ class SCADARiskModel:
             return "Warning"
         return "Normal"
 
+    def _fit_iqr_bounds(self, raw_df: pd.DataFrame):
+        self.iqr_bounds = {}
+        for column in self.RAW_NUMERIC_COLS:
+            values = pd.to_numeric(raw_df[column], errors="coerce").dropna()
+            if values.empty:
+                continue
+            q1 = float(values.quantile(0.25))
+            q3 = float(values.quantile(0.75))
+            spread = q3 - q1
+            self.iqr_bounds[column] = {
+                "lower": q1 - 1.5 * spread,
+                "upper": q3 + 1.5 * spread,
+            }
+
+    def add_iqr_features(self, engineered_df: pd.DataFrame) -> pd.DataFrame:
+        result = engineered_df.copy()
+        for column, bounds in self.iqr_bounds.items():
+            result[f"{column}_iqr_outlier"] = (
+                (result[column] < bounds["lower"]) |
+                (result[column] > bounds["upper"])
+            ).astype(int)
+        return result
+
     # ---------------------------------------------------------------
     # Training
     # ---------------------------------------------------------------
@@ -169,7 +193,14 @@ class SCADARiskModel:
         self.raw_df = raw_df.copy()
         self.raw_df["timestamp"] = pd.to_datetime(self.raw_df["timestamp"])
 
+        raw_for_cutoff = raw_df.copy()
+        raw_for_cutoff["timestamp"] = pd.to_datetime(raw_for_cutoff["timestamp"])
+        unique_times = np.sort(raw_for_cutoff["timestamp"].unique())
+        cutoff = unique_times[int(len(unique_times) * 0.8)]
+        self._fit_iqr_bounds(raw_for_cutoff[raw_for_cutoff["timestamp"] <= cutoff])
+
         featured_df = self.engineer_features(raw_df)
+        featured_df = self.add_iqr_features(featured_df)
         sorted_df = featured_df.sort_values(["timestamp", "segment_id"]).reset_index(drop=True)
 
         self.feature_columns = [c for c in sorted_df.columns
@@ -192,8 +223,6 @@ class SCADARiskModel:
         self.metrics["cv_folds"] = len(cv_f1)
 
         # --- chronological holdout split ---
-        unique_times = np.sort(sorted_df["timestamp"].unique())
-        cutoff = unique_times[int(len(unique_times) * 0.8)]
         train_df = sorted_df[sorted_df["timestamp"] <= cutoff].reset_index(drop=True)
         test_df = sorted_df[sorted_df["timestamp"] > cutoff].reset_index(drop=True)
         y_train = train_df["target"].astype(int)
@@ -326,6 +355,7 @@ class SCADARiskModel:
             window["timestamp"] = pd.Timestamp.now()
 
         feats = self.engineer_features(window)
+        feats = self.add_iqr_features(feats)
         latest = feats.iloc[[-1]]
 
         X_live = latest.reindex(columns=self.feature_columns, fill_value=0).astype(float)

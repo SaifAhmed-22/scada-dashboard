@@ -8,6 +8,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT / "webapp"))
 
 from scada_adapter import load_config, normalize_scada_frame  # noqa: E402
+from model_pipeline import SCADARiskModel  # noqa: E402
 
 
 class ScadaAdapterTests(unittest.TestCase):
@@ -65,6 +66,13 @@ class ScadaAdapterTests(unittest.TestCase):
         self.assertAlmostEqual(normalized.iloc[0]["pressure"], 6.89475729, places=5)
         self.assertAlmostEqual(normalized.iloc[0]["flow_rate"], 1.0, places=5)
         self.assertEqual(report["invalid_rows_removed"], 1)
+
+    def test_iqr_flags_mark_values_outside_training_bounds(self):
+        model = SCADARiskModel()
+        model.iqr_bounds = {"pressure": {"lower": 40, "upper": 80}}
+        frame = pd.DataFrame({"pressure": [35, 60, 90]})
+        flagged = model.add_iqr_features(frame)
+        self.assertEqual(flagged["pressure_iqr_outlier"].tolist(), [1, 0, 1])
 
 
 if __name__ == "__main__":

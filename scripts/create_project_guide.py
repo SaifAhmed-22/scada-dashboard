@@ -115,7 +115,7 @@ document.add_paragraph("The model is an early-warning tool. It does not replace 
 add_heading(document, "2. What Is Included?", 1)
 add_table(document, ["Area", "What it contains"], [
     ("Machine learning", "Isolation Forest anomaly detection plus XGBoost or Random Forest classification."),
-    ("Feature engineering", "Rolling pressure, flow, temperature, pump-speed, and energy statistics; gradients; anomaly indexes; state-change flags."),
+    ("Feature engineering", "Rolling pressure, flow, temperature, pump-speed, and energy statistics; gradients; anomaly indexes; state-change flags; and IQR sensor-outlier flags."),
     ("Backend", "Flask application with model APIs, data validation, CSV export, topology data, and alert actions."),
     ("Frontend", "SCADA-style browser dashboard built with HTML, CSS, JavaScript, Chart.js, and SVG."),
     ("Operations", "Risk timeline, telemetry charts, segment overview, detection log, scenario presets, and alert acknowledgement."),
@@ -194,6 +194,7 @@ add_bullets(document, [
     "Rolling features compare a reading with its recent and longer-term segment behavior.",
     "SHAP values explain which features pushed a prediction higher or lower.",
 ])
+document.add_paragraph("The model now also calculates IQR outlier flags for pressure, flow, temperature, pump speed, and energy consumption. The bounds are learned from the training period using the usual 1.5 × IQR rule and reused during prediction. These flags help identify unusual sensor behavior; they are not proof of a leak and do not directly set the Normal, Warning, or Critical alert thresholds.")
 
 add_heading(document, "8. Dashboard Workflow", 1)
 add_numbered(document, [
@@ -222,7 +223,7 @@ add_table(document, ["Item", "Current value"], [
     ("SCADA readings", "1,000"),
     ("Segments", "50"),
     ("Raw fields", "13"),
-    ("Engineered model features", "67"),
+    ("Engineered model features after retraining", "72"),
     ("Training rows", "840"),
     ("Chronological test rows", "160"),
     ("Holdout AUC", "0.9938"),
