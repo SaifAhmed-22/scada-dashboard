@@ -12,7 +12,7 @@ import os
 import json
 import numpy as np
 import pandas as pd
-from flask import Flask, render_template, jsonify, request
+from flask import Flask, Response, render_template, jsonify, request
 
 from model_pipeline import SCADARiskModel
 
@@ -39,6 +39,8 @@ _segment_summary = (
         num_incidents=("target", "sum"),
         max_risk_score=("risk_score_pct", "max"),
         last_alert_level=("alert_level", "last"),
+        last_risk_score=("risk_score_pct", "last"),
+        last_timestamp=("timestamp", "last"),
     )
     .reset_index()
     .sort_values(["num_incidents", "max_risk_score"], ascending=False)
@@ -106,6 +108,55 @@ def api_meta():
 def api_segments():
     records = _segment_summary.to_dict(orient="records")
     return jsonify(_clean(records))
+
+
+@app.route("/api/operations")
+def api_operations():
+    scored = model.scored_history.sort_values("timestamp")
+    raw_context = raw_df[["timestamp", "segment_id", "pressure", "flow_rate", "event_type"]]
+    scored = scored.merge(raw_context, on=["timestamp", "segment_id"], how="left", suffixes=("", "_raw"))
+    latest = scored.iloc[-1]
+    alert_counts = scored["alert_level"].value_counts().to_dict()
+    detection_rows = scored[scored["alert_level"] != "Normal"].tail(50).iloc[::-1]
+
+    detections = []
+    for _, row in detection_rows.iterrows():
+        detections.append({
+            "timestamp": str(row["timestamp"]),
+            "segment_id": int(row["segment_id"]),
+            "risk_score_pct": float(row["risk_score_pct"]),
+            "alert_level": row["alert_level"],
+            "event_type": row.get("event_type_raw", row.get("event_type", "unknown")),
+            "pressure": float(row["pressure"]),
+            "flow_rate": float(row["flow_rate"]),
+        })
+
+    payload = {
+        "summary": {
+            "latest_timestamp": str(latest["timestamp"]),
+            "latest_segment_id": int(latest["segment_id"]),
+            "latest_risk_score": float(latest["risk_score_pct"]),
+            "latest_alert_level": latest["alert_level"],
+            "critical_count": int(alert_counts.get("Critical Leak Threat", 0)),
+            "warning_count": int(alert_counts.get("Warning", 0)),
+            "normal_count": int(alert_counts.get("Normal", 0)),
+        },
+        "detections": detections,
+        "segments": _segment_summary.to_dict(orient="records"),
+    }
+    return jsonify(_clean(payload))
+
+
+@app.route("/api/export/data")
+def api_export_data():
+    export_df = raw_df
+    segment_id = request.args.get("segment_id", type=int)
+    if segment_id is not None:
+        export_df = raw_df[raw_df["segment_id"] == segment_id]
+    response = Response(export_df.to_csv(index=False), mimetype="text/csv")
+    filename = "scada_pipeline.csv" if segment_id is None else f"scada_segment_{segment_id}.csv"
+    response.headers["Content-Disposition"] = f"attachment; filename={filename}"
+    return response
 
 
 @app.route("/api/simulate/<int:segment_id>")

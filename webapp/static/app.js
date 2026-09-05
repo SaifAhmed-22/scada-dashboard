@@ -16,6 +16,8 @@ const state = {
   playing: false,
   playTimer: null,
   chart: null,
+  telemetryChart: null,
+  operations: null,
 };
 
 // ---------------------------------------------------------------
@@ -32,6 +34,15 @@ function fmt(n, digits = 1) {
   return Number(n).toFixed(digits);
 }
 
+function escapeHtml(value) {
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
 const VALVE_NAMES = { 0: "CLOSED", 1: "OPEN", 2: "PARTIAL" };
 const VALVE_COLORS = { 0: "#e2483d", 1: "#45b880", 2: "#e8a33d" };
 
@@ -45,6 +56,7 @@ document.addEventListener("DOMContentLoaded", () => {
   setupWhatIfForm();
   loadMeta();
   loadSegments();
+  loadOperations();
 });
 
 function startClock() {
@@ -151,7 +163,7 @@ async function loadSegments() {
         <span class="seg-id">SEG-${String(s.segment_id).padStart(3, "0")}</span>
         <span class="badge ${alertClass(s.last_alert_level)}">${s.last_alert_level}</span>
       </div>
-      <div class="incidents">${s.num_readings} readings · ${s.num_incidents} historical incidents</div>
+      <div class="incidents">${s.num_readings} readings · ${s.num_incidents} incidents · ${fmt(s.last_risk_score, 1)}% latest</div>
     </div>`
     )
     .join("");
@@ -189,6 +201,43 @@ async function selectSegment(segId) {
   scrub.value = state.tickIndex;
 
   renderTick(state.tickIndex);
+  buildTelemetryChart();
+}
+
+async function loadOperations() {
+  try {
+    const res = await fetch("/api/operations");
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    state.operations = await res.json();
+    renderOperations(state.operations);
+  } catch (err) {
+    document.getElementById("ops-status").textContent = "Operations unavailable";
+    document.getElementById("detection-log").innerHTML = `<p class="empty-state">Unable to load detection history.</p>`;
+  }
+}
+
+function renderOperations(operations) {
+  const summary = operations.summary;
+  const level = summary.latest_alert_level;
+  const dot = document.getElementById("ops-dot");
+  dot.className = `ops-dot ${alertClass(level)}`;
+  document.getElementById("ops-status").textContent = level === "Normal" ? "Network normal" : level;
+  document.getElementById("ops-risk").textContent = `${fmt(summary.latest_risk_score, 1)}%`;
+  document.getElementById("ops-critical").textContent = summary.critical_count;
+  document.getElementById("ops-warning").textContent = summary.warning_count;
+  document.getElementById("ops-time").textContent = summary.latest_timestamp;
+
+  const detectionLog = document.getElementById("detection-log");
+  detectionLog.innerHTML = operations.detections.length
+    ? `<table class="data-table"><thead><tr><th>Time</th><th>Segment</th><th>Risk</th><th>Alert</th><th>Event</th></tr></thead><tbody>${operations.detections
+        .map((d) => `<tr><td>${escapeHtml(d.timestamp)}</td><td>SEG-${String(d.segment_id).padStart(3, "0")}</td><td class="mono">${fmt(d.risk_score_pct, 1)}%</td><td><span class="badge ${alertClass(d.alert_level)}">${escapeHtml(d.alert_level)}</span></td><td>${escapeHtml(d.event_type)}</td></tr>`)
+        .join("")}</tbody></table>`
+    : `<p class="empty-state">No warnings or critical readings recorded.</p>`;
+
+  const overview = [...operations.segments].sort((a, b) => b.last_risk_score - a.last_risk_score);
+  document.getElementById("segment-overview").innerHTML = `<table class="data-table"><thead><tr><th>Segment</th><th>Latest risk</th><th>Max risk</th><th>Incidents</th><th>Status</th></tr></thead><tbody>${overview
+    .map((s) => `<tr><td class="mono">SEG-${String(s.segment_id).padStart(3, "0")}</td><td class="mono">${fmt(s.last_risk_score, 1)}%</td><td class="mono">${fmt(s.max_risk_score, 1)}%</td><td>${s.num_incidents}</td><td><span class="badge ${alertClass(s.last_alert_level)}">${escapeHtml(s.last_alert_level)}</span></td></tr>`)
+    .join("")}</tbody></table>`;
 }
 
 // ---------------------------------------------------------------
@@ -390,6 +439,24 @@ function buildChart() {
           pointRadius: 6,
           showLine: false,
         },
+        {
+          label: "Warning threshold",
+          data: state.simData.map(() => 33),
+          borderColor: "#e8a33d",
+          borderDash: [5, 5],
+          borderWidth: 1,
+          pointRadius: 0,
+          fill: false,
+        },
+        {
+          label: "Critical threshold",
+          data: state.simData.map(() => 66),
+          borderColor: "#e2483d",
+          borderDash: [5, 5],
+          borderWidth: 1,
+          pointRadius: 0,
+          fill: false,
+        },
       ],
     },
     options: {
@@ -406,6 +473,33 @@ function buildChart() {
         },
       },
       plugins: { legend: { display: false } },
+    },
+  });
+}
+
+function buildTelemetryChart() {
+  const canvas = document.getElementById("telemetry-chart");
+  if (!canvas || !state.simData.length) return;
+  if (state.telemetryChart) state.telemetryChart.destroy();
+  state.telemetryChart = new Chart(canvas.getContext("2d"), {
+    type: "line",
+    data: {
+      labels: state.simData.map((d) => d.timestamp),
+      datasets: [
+        { label: "Pressure", data: state.simData.map((d) => d.raw.pressure), borderColor: "#4fb8e0", backgroundColor: "rgba(79,184,224,0.08)", yAxisID: "y", pointRadius: 1, tension: 0.2 },
+        { label: "Flow rate", data: state.simData.map((d) => d.raw.flow_rate), borderColor: "#45b880", backgroundColor: "rgba(69,184,128,0.06)", yAxisID: "y1", pointRadius: 1, tension: 0.2 },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: false,
+      scales: {
+        x: { ticks: { color: "#7c8798", maxTicksLimit: 8, font: { family: "IBM Plex Mono", size: 10 } }, grid: { color: "#2a3341" } },
+        y: { position: "left", ticks: { color: "#4fb8e0" }, grid: { color: "#2a3341" } },
+        y1: { position: "right", ticks: { color: "#45b880" }, grid: { drawOnChartArea: false } },
+      },
+      plugins: { legend: { labels: { color: "#7c8798", font: { family: "IBM Plex Sans" } } } },
     },
   });
 }
@@ -483,6 +577,27 @@ function setupWhatIfForm() {
   });
 
   document.getElementById("wi-predict-btn").addEventListener("click", runWhatIf);
+  document.getElementById("wi-inject-btn").addEventListener("click", applyScenario);
+}
+
+function setInputValue(inputId, value) {
+  const input = document.getElementById(inputId);
+  input.value = value;
+  input.dispatchEvent(new Event("input"));
+}
+
+function applyScenario() {
+  const scenario = document.getElementById("wi-scenario").value;
+  const presets = {
+    "low-pressure": { "wi-pressure": 48, "wi-flow": 4.8, "wi-temp": 34, "wi-pumpspeed": 1450, "wi-energy": 36, "wi-alarm": 0 },
+    "flow-disruption": { "wi-pressure": 82, "wi-flow": 1.2, "wi-temp": 31, "wi-pumpspeed": 1500, "wi-energy": 42, "wi-alarm": 0 },
+    "leak-signature": { "wi-pressure": 45, "wi-flow": 2.1, "wi-temp": 37, "wi-pumpspeed": 1380, "wi-energy": 44, "wi-alarm": 1 },
+    "pump-instability": { "wi-pressure": 68, "wi-flow": 3.1, "wi-temp": 33, "wi-pumpspeed": 350, "wi-energy": 51, "wi-alarm": 0 },
+  };
+  const values = presets[scenario];
+  if (!values) return;
+  Object.entries(values).forEach(([id, value]) => setInputValue(id, value));
+  document.getElementById("wi-result").textContent = "Scenario applied. Score the reading to evaluate this condition.";
 }
 
 async function runWhatIf() {

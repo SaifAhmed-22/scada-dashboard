@@ -34,11 +34,28 @@
 <!-- VIEW 1 — Live Monitor                                          -->
 <!-- ============================================================ -->
 <section class="view active" id="view-monitor">
+  <div class="ops-strip" id="ops-strip">
+    <div class="ops-state">
+      <span class="ops-dot normal" id="ops-dot"></span>
+      <div>
+        <div class="ops-label">Network status</div>
+        <div class="ops-value" id="ops-status">Loading operations...</div>
+      </div>
+    </div>
+    <div class="ops-metric"><span>Latest risk</span><strong id="ops-risk">—</strong></div>
+    <div class="ops-metric"><span>Critical alerts</span><strong class="critical-text" id="ops-critical">—</strong></div>
+    <div class="ops-metric"><span>Warnings</span><strong class="warning-text" id="ops-warning">—</strong></div>
+    <div class="ops-metric"><span>Last scored</span><strong id="ops-time">—</strong></div>
+  </div>
+
   <div class="monitor-grid">
 
     <!-- left rail: segment picker -->
     <div class="panel">
-      <div class="panel-head"><h2>Pipeline Segments</h2></div>
+      <div class="panel-head">
+        <h2>Pipeline Segments</h2>
+        <a class="text-btn" href="/api/export/data">CSV</a>
+      </div>
       <div id="segment-list"></div>
     </div>
 
@@ -68,7 +85,10 @@
       </div>
 
       <div class="panel">
-        <div class="panel-head"><h2>Risk Score Timeline</h2></div>
+        <div class="panel-head">
+          <h2>Risk Score Timeline</h2>
+          <span class="panel-note">historical replay</span>
+        </div>
         <div class="chart-wrap"><canvas id="risk-chart"></canvas></div>
         <div class="playback-bar">
           <button class="play-btn" id="play-btn">▶</button>
@@ -92,6 +112,35 @@
       </div>
     </div>
   </div>
+
+  <div class="monitor-lower-grid">
+    <div class="panel">
+      <div class="panel-head">
+        <h2>Detection Log</h2>
+        <span class="panel-note">latest non-normal readings</span>
+      </div>
+      <div class="table-wrap" id="detection-log">
+        <p class="empty-state">Loading detections...</p>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="panel-head">
+        <h2>Segment Risk Overview</h2>
+        <span class="panel-note">ranked by latest score</span>
+      </div>
+      <div class="table-wrap" id="segment-overview">
+        <p class="empty-state">Loading segment overview...</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel telemetry-panel">
+    <div class="panel-head">
+      <h2>Pressure &amp; Flow Telemetry</h2>
+      <span class="panel-note">selected segment</span>
+    </div>
+    <div class="chart-wrap"><canvas id="telemetry-chart"></canvas></div>
+  </div>
 </section>
 
 <!-- ============================================================ -->
@@ -110,6 +159,17 @@
         <div class="field" id="wi-segment-field" style="display:none;">
           <label>Reference segment</label>
           <select id="wi-segment"></select>
+        </div>
+
+        <div class="field">
+          <label for="wi-scenario">Scenario preset</label>
+          <select id="wi-scenario">
+            <option value="custom">Custom sensor values</option>
+            <option value="low-pressure">Low pressure event</option>
+            <option value="flow-disruption">Flow disruption</option>
+            <option value="leak-signature">Leak signature</option>
+            <option value="pump-instability">Pump instability</option>
+          </select>
         </div>
 
         <div class="field">
@@ -162,7 +222,10 @@
           </select>
         </div>
 
-        <button class="primary-btn" id="wi-predict-btn">Score this reading</button>
+        <div class="button-row">
+          <button class="secondary-btn" id="wi-inject-btn">Apply scenario</button>
+          <button class="primary-btn" id="wi-predict-btn">Score this reading</button>
+        </div>
       </div>
     </div>
 
