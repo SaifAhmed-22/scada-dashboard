@@ -4,14 +4,11 @@
 
 import os
 import sys
-import json
 import numpy as np
 import pandas as pd
 import yaml
 from flask import Flask, Response, render_template, jsonify, request
 
-# Render's free 512 MiB service must not spend its limited memory on optional
-# training-time extras. The research pipeline itself remains unchanged locally.
 DEPLOYMENT_MODE = os.getenv("SCADA_DEPLOYMENT_MODE", "0").lower() in {"1", "true", "yes"}
 import model_pipeline as model_pipeline_module
 if DEPLOYMENT_MODE:
@@ -28,9 +25,6 @@ sys.path.insert(0, PROJECT_ROOT)
 RAW_DATA_PATH = os.path.join(PROJECT_ROOT, "data", "raw", "scada_pipeline.csv")
 REPAIRED_DATA_PATH = os.path.join(PROJECT_ROOT, "data", "processed", "scada_pipeline_repaired.csv")
 TITAS_SYNTHETIC_DATA_PATH = os.path.join(PROJECT_ROOT, "data", "raw", "titas_synthetic_scada.csv")
-# The deployed service must not generate a large dataset during Gunicorn boot.
-# If the dataset is absent, keep a deterministic lightweight fallback so the
-# web process can start; the Titas generator can be run during build/development.
 if os.path.exists(TITAS_SYNTHETIC_DATA_PATH):
     DATA_PATH = TITAS_SYNTHETIC_DATA_PATH
 else:
@@ -43,9 +37,6 @@ TITAS_SENSITIVITY_PATH = os.path.join(PROJECT_ROOT, "data", "titas", "titas_sens
 PLOTS_DIR = os.path.join(BASE_DIR, "static", "img")
 MODEL_ARTIFACT_PATH = os.getenv("PIPELINE_RISK_MODEL_PATH")
 ALERT_DB_PATH = os.getenv("PIPELINE_RISK_ALERT_DB", os.path.join(PROJECT_ROOT, "data", "runtime", "alerts.db"))
-
-# Keep the browser responsive. The full scored history remains on the server;
-# only the interactive replay payload is reduced to a bounded number of points.
 MAX_SIMULATION_POINTS = int(os.getenv("MAX_SIMULATION_POINTS", "600"))
 
 app = Flask(__name__)
@@ -69,8 +60,6 @@ if "pressure" not in model.scored_history.columns or "flow_rate" not in model.sc
         model.scored_history["pressure"] = raw_history["pressure"].to_numpy()
         model.scored_history["flow_rate"] = raw_history["flow_rate"].to_numpy()
 
-# Report plots are useful for the research artifact but expensive and unnecessary
-# on every web-server boot. Render deployment serves the dashboard metrics instead.
 if not DEPLOYMENT_MODE:
     model.save_report_plots(PLOTS_DIR)
 
@@ -81,7 +70,7 @@ TITAS_FEATURE_MARKERS = {
     "wht_delta_from_historical_f", "flow_vs_historical_ratio", "flow_delta_from_historical_mmscfd",
     "expected_flow_mmscfd_backpressure", "flow_residual_mmscfd", "flow_residual_ratio", "absolute_flow_residual_ratio",
 }
-_model_feature_names = set(getattr(model, "feature_names", []) or [])
+_model_feature_names = set(getattr(model, "feature_columns", []) or [])
 _titas_active_features = sorted(_model_feature_names.intersection(TITAS_FEATURE_MARKERS))
 _titas_has_well_ids = "well_id" in raw_df.columns
 _titas_status = {
@@ -115,13 +104,15 @@ def _clean(obj):
     return obj
 
 def _bounded_series(rows, limit):
-    """Downsample an ordered list while always preserving first and last rows."""
-    if len(rows) <= limit:
-        return rows
-    if limit < 2:
-        return rows[-1:]
+    if len(rows) <= limit: return rows
+    if limit < 2: return rows[-1:]
     indices = np.linspace(0, len(rows) - 1, limit, dtype=int)
     return [rows[int(i)] for i in indices]
+
+def _raw_value(row, key, default=0):
+    value = row.get(key, default)
+    if pd.isna(value): return default
+    return value
 
 @app.route("/")
 def index(): return render_template("index.html")
@@ -153,19 +144,31 @@ def api_segments(): return jsonify(_clean(_segment_summary.to_dict(orient="recor
 
 @app.route("/api/operations")
 def api_operations():
-    scored = model.scored_history.sort_values("timestamp")
-    latest = scored.iloc[-1]
-    alert_counts = scored["alert_level"].value_counts().to_dict()
-    detection_rows = scored[scored["alert_level"] != "Normal"].tail(50).iloc[::-1]
-    detections = []
-    for _, row in detection_rows.iterrows():
-        detections.append({"timestamp": str(row["timestamp"]), "segment_id": int(row["segment_id"]), "risk_score_pct": float(row["risk_score_pct"]),
-                           "alert_level": row["alert_level"], "event_type": row.get("event_type", "unknown"), "pressure": float(row["pressure"]), "flow_rate": float(row["flow_rate"])})
-    detections = alert_store.enrich(detections)
-    return jsonify(_clean({"summary": {"latest_timestamp": str(latest["timestamp"]), "latest_segment_id": int(latest["segment_id"]),
-                                      "latest_risk_score": float(latest["risk_score_pct"]), "latest_alert_level": latest["alert_level"],
-                                      "critical_count": int(alert_counts.get("Critical Leak Threat", 0)), "warning_count": int(alert_counts.get("Warning", 0)), "normal_count": int(alert_counts.get("Normal", 0))},
-                          "detections": detections, "segments": _segment_summary.to_dict(orient="records")}))
+    try:
+        scored = model.scored_history.sort_values("timestamp")
+        if scored.empty:
+            return jsonify({"summary": {}, "detections": [], "segments": []})
+        latest = scored.iloc[-1]
+        alert_counts = scored["alert_level"].value_counts().to_dict()
+        detection_rows = scored[scored["alert_level"] != "Normal"].tail(50).iloc[::-1]
+        detections = []
+        for _, row in detection_rows.iterrows():
+            detections.append({"timestamp": str(row["timestamp"]), "segment_id": int(row["segment_id"]), "risk_score_pct": float(row["risk_score_pct"]),
+                               "alert_level": row["alert_level"], "event_type": row.get("event_type", "unknown"), "pressure": float(row["pressure"]), "flow_rate": float(row["flow_rate"])})
+        try:
+            detections = alert_store.enrich(detections)
+        except Exception as alert_error:
+            print(f"Alert store unavailable; returning detections without persistence: {alert_error}")
+            for detection in detections:
+                detection["status"] = "open"
+                detection["alert_key"] = alert_store.make_key(detection)
+        return jsonify(_clean({"summary": {"latest_timestamp": str(latest["timestamp"]), "latest_segment_id": int(latest["segment_id"]),
+                                          "latest_risk_score": float(latest["risk_score_pct"]), "latest_alert_level": latest["alert_level"],
+                                          "critical_count": int(alert_counts.get("Critical Leak Threat", 0)), "warning_count": int(alert_counts.get("Warning", 0)), "normal_count": int(alert_counts.get("Normal", 0))},
+                              "detections": detections, "segments": _segment_summary.to_dict(orient="records")}))
+    except Exception as exc:
+        print(f"Operations API error: {exc}")
+        return jsonify({"error": "Operations data unavailable", "details": str(exc)}), 500
 
 @app.route("/api/topology")
 def api_topology():
@@ -208,11 +211,52 @@ def api_export_data():
 
 @app.route("/api/simulate/<int:segment_id>")
 def api_simulate(segment_id):
-    if segment_id not in raw_df["segment_id"].unique(): return jsonify({"error": f"Unknown segment_id {segment_id}"}), 404
-    stream = model.simulate_stream(segment_id)
-    # Keep all research/scoring data server-side but send a bounded replay to
-    # Chart.js. This prevents 15k+ labels/points from freezing the browser.
-    return jsonify(_clean(_bounded_series(stream, MAX_SIMULATION_POINTS)))
+    if segment_id not in raw_df["segment_id"].unique():
+        return jsonify({"error": f"Unknown segment_id {segment_id}"}), 404
+
+    # IMPORTANT: do not call simulate_stream() here. That method intentionally
+    # replays prediction one reading at a time and is appropriate for research
+    # experiments, but it is too expensive for a small Render web worker.
+    # The model has already scored the complete history at startup. Reuse those
+    # scores and pair them with raw telemetry for a fast dashboard replay.
+    scored = model.scored_history[model.scored_history["segment_id"] == segment_id].sort_values("timestamp").reset_index(drop=True)
+    raw_segment = raw_df[raw_df["segment_id"] == segment_id].sort_values("timestamp").reset_index(drop=True)
+    if scored.empty or raw_segment.empty:
+        return jsonify({"error": "No segment history available"}), 404
+
+    limit = min(MAX_SIMULATION_POINTS, len(scored))
+    if len(scored) > limit:
+        indices = np.linspace(0, len(scored) - 1, limit, dtype=int)
+    else:
+        indices = np.arange(len(scored))
+
+    stream = []
+    for i in indices:
+        s = scored.iloc[int(i)]
+        # Timestamp-aligned raw row; fall back to the same positional row.
+        matches = raw_segment.index[raw_segment["timestamp"] == s["timestamp"]].tolist()
+        r = raw_segment.iloc[matches[0]] if matches else raw_segment.iloc[min(int(i), len(raw_segment) - 1)]
+        stream.append({
+            "timestamp": str(s["timestamp"]),
+            "segment_id": int(s["segment_id"]),
+            "risk_score_pct": float(s["risk_score_pct"]),
+            "alert_level": str(s["alert_level"]),
+            "anomaly_score": float(s.get("anomaly_score", 0.0)),
+            "classifier_probability": float(s.get("classifier_probability", 0.0)),
+            "top_contributing_factors": [],
+            "raw": {
+                "pressure": float(_raw_value(r, "pressure")),
+                "flow_rate": float(_raw_value(r, "flow_rate")),
+                "temperature": float(_raw_value(r, "temperature")),
+                "valve_status": int(_raw_value(r, "valve_status")),
+                "pump_state": int(_raw_value(r, "pump_state")),
+                "pump_speed": float(_raw_value(r, "pump_speed")),
+                "compressor_state": int(_raw_value(r, "compressor_state")),
+                "energy_consumption": float(_raw_value(r, "energy_consumption")),
+                "alarm_triggered": int(_raw_value(r, "alarm_triggered")),
+            },
+        })
+    return jsonify(_clean(stream))
 
 @app.route("/api/predict", methods=["POST"])
 def api_predict():
