@@ -1,0 +1,113 @@
+scenario_type,scenario_value,well_id,whp_psia,wht_f,flow_mmscfd,source_table,notes
+reservoir_pressure_model1,3000,TT-1,2228.1,144.1,21.78,Table 8.2,TT-1..TT-5 and TT-7 common reservoir-pressure scenario
+reservoir_pressure_model1,3000,TT-2,2333.1,147.1,25.68,Table 8.2,TT-1..TT-5 and TT-7 common reservoir-pressure scenario
+reservoir_pressure_model1,3000,TT-3,2322.8,146.4,27.08,Table 8.2,TT-1..TT-5 and TT-7 common reservoir-pressure scenario
+reservoir_pressure_model1,3000,TT-4,2252.7,144.8,25.27,Table 8.2,TT-1..TT-5 and TT-7 common reservoir-pressure scenario
+reservoir_pressure_model1,3000,TT-5,2281.8,146.3,26.88,Table 8.2,TT-1..TT-5 and TT-7 common reservoir-pressure scenario
+reservoir_pressure_model1,3000,TT-7,2268.3,142.9,23.55,Table 8.2,TT-1..TT-5 and TT-7 common reservoir-pressure scenario
+reservoir_pressure_model1,2500,TT-1,1833.1,140.1,17.90,Table 8.2,TT-1..TT-5 and TT-7 common reservoir-pressure scenario
+reservoir_pressure_model1,2500,TT-2,1931.4,145.2,21.37,Table 8.2,TT-1..TT-5 and TT-7 common reservoir-pressure scenario
+reservoir_pressure_model1,2500,TT-3,1919.1,143.8,22.35,Table 8.2,TT-1..TT-5 and TT-7 common reservoir-pressure scenario
+reservoir_pressure_model1,2500,TT-4,1852.7,141.1,20.78,Table 8.2,TT-1..TT-5 and TT-7 common reservoir-pressure scenario
+reservoir_pressure_model1,2500,TT-5,1889.1,145.0,22.30,Table 8.2,TT-1..TT-5 and TT-7 common reservoir-pressure scenario
+reservoir_pressure_model1,2500,TT-7,1869.9,139.4,19.52,Table 8.2,TT-1..TT-5 and TT-7 common reservoir-pressure scenario
+reservoir_pressure_model1,2000,TT-1,1473.6,133.6,12.82,Table 8.2,TT-1..TT-5 and TT-7 common reservoir-pressure scenario
+reservoir_pressure_model1,2000,TT-2,1551.7,137.9,15.71,Table 8.2,TT-1..TT-5 and TT-7 common reservoir-pressure scenario
+reservoir_pressure_model1,2000,TT-3,1536.4,136.6,16.33,Table 8.2,TT-1..TT-5 and TT-7 common reservoir-pressure scenario
+reservoir_pressure_model1,2000,TT-4,1845.7,134.4,14.88,Table 8.2,TT-1..TT-5 and TT-7 common reservoir-pressure scenario
+reservoir_pressure_model1,2000,TT-5,1524.7,137.7,16.25,Table 8.2,TT-1..TT-5 and TT-7 common reservoir-pressure scenario
+reservoir_pressure_model1,2000,TT-7,1503.5,132.6,14.11,Table 8.2,TT-1..TT-5 and TT-7 common reservoir-pressure scenario
+reservoir_pressure_model1,1500,TT-1,1146.9,118.8,6.92,Table 8.2,TT-1..TT-5 and TT-7 common reservoir-pressure scenario
+reservoir_pressure_model1,1500,TT-2,1192.7,124.3,8.87,Table 8.2,TT-1..TT-5 and TT-7 common reservoir-pressure scenario
+reservoir_pressure_model1,1500,TT-3,1179.2,122.4,9.08,Table 8.2,TT-1..TT-5 and TT-7 common reservoir-pressure scenario
+reservoir_pressure_model1,1500,TT-4,1150.8,119.5,8.01,Table 8.2,TT-1..TT-5 and TT-7 common reservoir-pressure scenario
+reservoir_pressure_model1,1500,TT-5,1181.0,125.2,9.11,Table 8.2,TT-1..TT-5 and TT-7 common reservoir-pressure scenario
+reservoir_pressure_model1,1500,TT-7,1164.0,118.5,7.72,Table 8.2,TT-1..TT-5 and TT-7 common reservoir-pressure scenario
+reservoir_pressure_model2_tt6_tt11,3000,TT-6,2362.9,146.9,24.52,Table 8.3,TT-6 and TT-11 pressure scenario
+reservoir_pressure_model2_tt6_tt11,3000,TT-8,2382.6,148.1,26.39,Table 8.3,TT-6 and TT-11 pressure scenario
+reservoir_pressure_model2_tt6_tt11,3000,TT-9,2337.3,148.0,27.11,Table 8.3,TT-6 and TT-11 pressure scenario
+reservoir_pressure_model2_tt6_tt11,3000,TT-10,2138.7,148.7,27.15,Table 8.3,TT-6 and TT-11 pressure scenario
+reservoir_pressure_model2_tt6_tt11,3000,TT-11,1795.7,139.4,20.33,Table 8.3,TT-6 and TT-11 pressure scenario
+reservoir_pressure_model2_tt6_tt11,2500,TT-6,1959.6,145.1,20.42,Table 8.3,TT-6 and TT-11 pressure scenario
+reservoir_pressure_model2_tt6_tt11,2500,TT-8,2382.9,148.1,26.37,Table 8.3,TT-6 and TT-11 pressure scenario
+reservoir_pressure_model2_tt6_tt11,2500,TT-9,2337.3,148.0,27.11,Table 8.3,TT-6 and TT-11 pressure scenario
+reservoir_pressure_model2_tt6_tt11,2500,TT-10,2138.9,148.7,27.14,Table 8.3,TT-6 and TT-11 pressure scenario
+reservoir_pressure_model2_tt6_tt11,2500,TT-11,1519.9,136.8,15.74,Table 8.3,TT-6 and TT-11 pressure scenario
+reservoir_pressure_model2_tt6_tt11,2000,TT-6,1573.0,137.4,15.16,Table 8.3,TT-6 and TT-11 pressure scenario
+reservoir_pressure_model2_tt6_tt11,2000,TT-8,2383.2,148.1,26.36,Table 8.3,TT-6 and TT-11 pressure scenario
+reservoir_pressure_model2_tt6_tt11,2000,TT-9,2337.4,148.0,27.11,Table 8.3,TT-6 and TT-11 pressure scenario
+reservoir_pressure_model2_tt6_tt11,2000,TT-10,2138.9,148.7,27.14,Table 8.3,TT-6 and TT-11 pressure scenario
+reservoir_pressure_model2_tt6_tt11,2000,TT-11,1271.0,131.1,10.94,Table 8.3,TT-6 and TT-11 pressure scenario
+reservoir_pressure_model2_tt6_tt11,1800,TT-6,1423.7,134.3,12.76,Table 8.3,TT-6 and TT-11 pressure scenario
+reservoir_pressure_model2_tt6_tt11,1800,TT-8,2383.1,148.1,26.36,Table 8.3,TT-6 and TT-11 pressure scenario
+reservoir_pressure_model2_tt6_tt11,1800,TT-9,2337.6,148.1,27.10,Table 8.3,TT-6 and TT-11 pressure scenario
+reservoir_pressure_model2_tt6_tt11,1800,TT-10,2139.0,148.7,27.13,Table 8.3,TT-6 and TT-11 pressure scenario
+reservoir_pressure_model2_tt6_tt11,1800,TT-11,1183.6,127.9,8.89,Table 8.3,TT-6 and TT-11 pressure scenario
+reservoir_pressure_model2_tt8_tt9,3000,TT-6,2618.1,150.4,26.98,Table 8.4,TT-8 and TT-9 pressure scenario
+reservoir_pressure_model2_tt8_tt9,3000,TT-8,2181.4,146.2,24.14,Table 8.4,TT-8 and TT-9 pressure scenario
+reservoir_pressure_model2_tt8_tt9,3000,TT-9,2137.0,146.3,24.85,Table 8.4,TT-8 and TT-9 pressure scenario
+reservoir_pressure_model2_tt8_tt9,3000,TT-10,2138.7,148.7,27.14,Table 8.4,TT-8 and TT-9 pressure scenario
+reservoir_pressure_model2_tt8_tt9,3000,TT-11,2018.2,142.4,23.18,Table 8.4,TT-8 and TT-9 pressure scenario
+reservoir_pressure_model2_tt8_tt9,2500,TT-6,2618.3,150.4,26.96,Table 8.4,TT-8 and TT-9 pressure scenario
+reservoir_pressure_model2_tt8_tt9,2500,TT-8,1800.3,141.2,19.74,Table 8.4,TT-8 and TT-9 pressure scenario
+reservoir_pressure_model2_tt8_tt9,2500,TT-9,1764.9,141.0,20.12,Table 8.4,TT-8 and TT-9 pressure scenario
+reservoir_pressure_model2_tt8_tt9,2500,TT-10,2138.6,148.7,27.15,Table 8.4,TT-8 and TT-9 pressure scenario
+reservoir_pressure_model2_tt8_tt9,2500,TT-11,2018.2,142.4,23.18,Table 8.4,TT-8 and TT-9 pressure scenario
+reservoir_pressure_model2_tt8_tt9,2000,TT-6,2618.3,150.4,26.97,Table 8.4,TT-8 and TT-9 pressure scenario
+reservoir_pressure_model2_tt8_tt9,2000,TT-8,1452.3,134.1,14.12,Table 8.4,TT-8 and TT-9 pressure scenario
+reservoir_pressure_model2_tt8_tt9,2000,TT-9,1426.5,133.8,14.31,Table 8.4,TT-8 and TT-9 pressure scenario
+reservoir_pressure_model2_tt8_tt9,2000,TT-10,2138.8,148.7,27.14,Table 8.4,TT-8 and TT-9 pressure scenario
+reservoir_pressure_model2_tt8_tt9,2000,TT-11,2018.3,142.4,23.18,Table 8.4,TT-8 and TT-9 pressure scenario
+reservoir_pressure_model2_tt10,3000,TT-6,2618.1,150.4,26.97,Table 8.5,TT-10 pressure scenario
+reservoir_pressure_model2_tt10,3000,TT-8,2382.3,148.1,26.40,Table 8.5,TT-10 pressure scenario
+reservoir_pressure_model2_tt10,3000,TT-9,2337.6,148.0,27.10,Table 8.5,TT-10 pressure scenario
+reservoir_pressure_model2_tt10,3000,TT-10,2066.2,148.3,26.22,Table 8.5,TT-10 pressure scenario
+reservoir_pressure_model2_tt10,3000,TT-11,2018.3,142.4,23.18,Table 8.5,TT-10 pressure scenario
+reservoir_pressure_model2_tt10,2500,TT-6,2618.1,150.4,26.98,Table 8.5,TT-10 pressure scenario
+reservoir_pressure_model2_tt10,2500,TT-8,2382.5,148.1,26.39,Table 8.5,TT-10 pressure scenario
+reservoir_pressure_model2_tt10,2500,TT-9,2337.3,148.0,27.12,Table 8.5,TT-10 pressure scenario
+reservoir_pressure_model2_tt10,2500,TT-10,1709.9,142.1,20.91,Table 8.5,TT-10 pressure scenario
+reservoir_pressure_model2_tt10,2500,TT-11,2018.2,142.4,23.18,Table 8.5,TT-10 pressure scenario
+reservoir_pressure_model2_tt10,2000,TT-6,2618.2,150.4,26.97,Table 8.5,TT-10 pressure scenario
+reservoir_pressure_model2_tt10,2000,TT-8,2382.9,148.1,26.37,Table 8.5,TT-10 pressure scenario
+reservoir_pressure_model2_tt10,2000,TT-9,2337.3,148.0,27.12,Table 8.5,TT-10 pressure scenario
+reservoir_pressure_model2_tt10,2000,TT-10,1386.7,134.0,14.74,Table 8.5,TT-10 pressure scenario
+reservoir_pressure_model2_tt10,2000,TT-11,2018.3,142.4,23.18,Table 8.5,TT-10 pressure scenario
+reservoir_pressure_model2_tt10,1500,TT-6,2618.2,150.4,26.97,Table 8.5,TT-10 pressure scenario
+reservoir_pressure_model2_tt10,1500,TT-8,2383.0,148.1,26.37,Table 8.5,TT-10 pressure scenario
+reservoir_pressure_model2_tt10,1500,TT-9,2337.3,148.0,27.12,Table 8.5,TT-10 pressure scenario
+reservoir_pressure_model2_tt10,1500,TT-10,1106.2,117.9,7.47,Table 8.5,TT-10 pressure scenario
+reservoir_pressure_model2_tt10,1500,TT-11,2018.3,142.4,23.18,Table 8.5,TT-10 pressure scenario
+sales_line1_pressure,600,TT-1,2423.1,145.5,23.58,Table 8.6,Sales-line-1 pressure scenario
+sales_line1_pressure,600,TT-2,2619.4,150.9,28.60,Table 8.6,Sales-line-1 pressure scenario
+sales_line1_pressure,600,TT-3,2613.0,149.9,30.11,Table 8.6,Sales-line-1 pressure scenario
+sales_line1_pressure,600,TT-4,2538.0,147.5,28.33,Table 8.6,Sales-line-1 pressure scenario
+sales_line1_pressure,600,TT-5,2560.7,150.3,29.97,Table 8.6,Sales-line-1 pressure scenario
+sales_line1_pressure,600,TT-7,2550.1,145.9,26.37,Table 8.6,Sales-line-1 pressure scenario
+sales_line1_pressure,1400,TT-1,2435.3,145.4,23.02,Table 8.6,Sales-line-1 pressure scenario
+sales_line1_pressure,1400,TT-2,2620.6,150.8,28.51,Table 8.6,Sales-line-1 pressure scenario
+sales_line1_pressure,1400,TT-3,2614.9,149.9,29.96,Table 8.6,Sales-line-1 pressure scenario
+sales_line1_pressure,1400,TT-4,2543.8,147.4,27.97,Table 8.6,Sales-line-1 pressure scenario
+sales_line1_pressure,1400,TT-5,2567.4,150.2,29.57,Table 8.6,Sales-line-1 pressure scenario
+sales_line1_pressure,1400,TT-7,2555.2,145.8,26.10,Table 8.6,Sales-line-1 pressure scenario
+sales_line1_pressure,1600,TT-1,2461.7,144.9,21.78,Table 8.6,Sales-line-1 pressure scenario
+sales_line1_pressure,1600,TT-2,2638.7,150.5,27.19,Table 8.6,Sales-line-1 pressure scenario
+sales_line1_pressure,1600,TT-3,2631.8,149.5,28.56,Table 8.6,Sales-line-1 pressure scenario
+sales_line1_pressure,1600,TT-4,2565.8,147.0,26.59,Table 8.6,Sales-line-1 pressure scenario
+sales_line1_pressure,1600,TT-5,2587.3,150.0,28.36,Table 8.6,Sales-line-1 pressure scenario
+sales_line1_pressure,1600,TT-7,2577.7,145.4,24.84,Table 8.6,Sales-line-1 pressure scenario
+sales_line3_pressure,600,TT-6,2618.5,150.4,26.95,Table 8.7,Sales-line-3 pressure scenario
+sales_line3_pressure,600,TT-8,2383.7,148.1,26.33,Table 8.7,Sales-line-3 pressure scenario
+sales_line3_pressure,600,TT-9,2337.2,148.0,27.12,Table 8.7,Sales-line-3 pressure scenario
+sales_line3_pressure,600,TT-10,2140.0,148.7,27.10,Table 8.7,Sales-line-3 pressure scenario
+sales_line3_pressure,600,TT-11,2016.0,142.3,23.21,Table 8.7,Sales-line-3 pressure scenario
+sales_line3_pressure,1400,TT-6,2619.5,150.4,26.87,Table 8.7,Sales-line-3 pressure scenario
+sales_line3_pressure,1400,TT-8,2401.1,147.7,25.52,Table 8.7,Sales-line-3 pressure scenario
+sales_line3_pressure,1400,TT-9,2361.1,147.6,26.09,Table 8.7,Sales-line-3 pressure scenario
+sales_line3_pressure,1400,TT-10,2188.1,147.8,25.28,Table 8.7,Sales-line-3 pressure scenario
+sales_line3_pressure,1400,TT-11,2113.9,142.9,21.69,Table 8.7,Sales-line-3 pressure scenario
+sales_line3_pressure,1600,TT-6,2635.7,149.8,25.60,Table 8.7,Sales-line-3 pressure scenario
+sales_line3_pressure,1600,TT-8,2430.4,147.0,24.08,Table 8.7,Sales-line-3 pressure scenario
+sales_line3_pressure,1600,TT-9,2394.3,146.9,24.61,Table 8.7,Sales-line-3 pressure scenario
+sales_line3_pressure,1600,TT-10,2231.2,146.8,23.55,Table 8.7,Sales-line-3 pressure scenario
+sales_line3_pressure,1600,TT-11,2185.5,143.3,20.49,Table 8.7,Sales-line-3 pressure scenario
