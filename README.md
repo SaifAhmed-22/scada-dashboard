@@ -1,8 +1,6 @@
-# Pipeline Risk Assessment
+# Titas SCADA Pipeline Risk Assessment
 
-A SCADA pipeline gas-leak risk assessment project with a Flask dashboard, time-series model, research material, and reproducible data layout.
-
-For a plain-language team overview, see [Pipeline Risk Project Guide](docs/Pipeline_Risk_Project_Guide.docx).
+A research-oriented SCADA gas-pipeline anomaly/leak-risk system with a Flask dashboard, chronological ML evaluation, explainability, data-quality controls, and an optional historical Titas field-context/physics layer.
 
 ## Quick start
 
@@ -13,34 +11,52 @@ py -m pip install -r requirements.txt
 py webapp\app.py
 ```
 
-Open <http://127.0.0.1:5000> after the model finishes training.
+Open `http://127.0.0.1:5000` after startup training completes.
 
-The app reads the collision-repaired demo dataset from `data/processed/scada_pipeline_repaired.csv` and writes dashboard plots to `webapp/static/img/` at startup. The original source sample remains in `data/raw/` for provenance.
+The demo application uses `data/processed/scada_pipeline_repaired.csv`. The original sample remains under `data/raw/` for provenance.
+
+## Research architecture
+
+```text
+SCADA input
+   │
+   ├── data validation / unit normalization
+   │
+   ├── chronological per-segment feature engineering
+   │       ├── rolling statistics
+   │       ├── pressure rate-of-change
+   │       ├── flow anomaly index
+   │       └── equipment state-change flags
+   │
+   ├── optional Titas context (requires explicit well_id)
+   │       ├── well geometry
+   │       ├── historical operating baselines
+   │       ├── reservoir context
+   │       └── validated physics residuals when flowing BHP exists
+   │
+   ├── Isolation Forest anomaly score
+   │
+   ├── supervised classifier
+   │
+   └── blended 0–100 risk score + alert level + SHAP factors
+```
 
 ## Repository layout
 
 ```text
-data/raw/       Canonical SCADA input data
-docs/data/       Dataset notes and generated documentation
-docs/research/  Research papers and supporting documents
-scripts/         Standalone analysis scripts
-artifacts/plots/ Reference plots produced by standalone analysis
-webapp/          Flask app, model module, templates, and frontend assets
+data/raw/          Original SCADA sample / provenance
+data/processed/    Validated/repaired demo data
+data/titas/        Historical Titas well, gas, and sensitivity data
+config/             SCADA/topology configuration
+docs/               Project and dataset documentation
+docs/research/      Research papers and supporting literature
+scripts/             Data audit, timestamp repair, training, and Titas augmentation
+tests/               Automated tests
+artifacts/           Generated model/plot outputs (where present)
+webapp/              Flask application, model pipeline, adapters, frontend
 ```
 
-## Standalone analysis
-
-```powershell
-py scripts\scada_risk_model.py
-```
-
-The standalone script resolves the dataset relative to the repository, so it can be run from any working directory.
-
-## Validated model training
-
-The Titas adapter is configured in `config/titas_scada.yml`. Replace its source
-tag names and units with the official SCADA historian specification before using
-live data. Train a versioned model artifact with:
+## Reproducible training
 
 ```powershell
 py scripts\repair_sample_timestamps.py
@@ -48,39 +64,34 @@ py scripts\audit_data.py --data data\processed\scada_pipeline_repaired.csv
 py scripts\train_model.py
 ```
 
-Training stops when same-segment timestamps collide because rolling features and
-pressure gradients need unambiguous chronology. The demo sample has a documented
-repair script that preserves every row and offsets collisions by seconds. Real
-Titas data must use a true historian sequence or source timestamp instead.
+Training uses a chronological holdout and time-series cross-validation. Same-segment timestamp collisions are rejected unless explicitly overridden after source review.
 
-To serve that artifact instead of training during Flask startup, set its path:
+A trained artifact can be served without startup retraining:
 
 ```powershell
 $env:PIPELINE_RISK_MODEL_PATH = "D:\path\to\pipeline_risk_model.pkl"
 py webapp\app.py
 ```
 
-Without `PIPELINE_RISK_MODEL_PATH`, the app retains development-mode startup
-training against the validated CSV.
+## Titas research layer
 
-The adapter normalizes timestamps to UTC, converts configured units, removes
-duplicate and invalid rows, and reports data-quality counts. Quality flags are
-kept outside the model feature matrix so sensor failures are not mistaken for
-leaks.
+`data/titas/` contains historical information extracted from the supplied 1999 BUET Titas production-system thesis. The model uses this information only when an explicit `well_id` is available; it never guesses a `segment_id -> TT-*` mapping.
 
-## Deployment
+The back-pressure relation is used only when explicit flowing bottomhole pressure is available. Pipeline pressure is not silently substituted for bottomhole pressure.
 
-The root `Procfile` uses Gunicorn with `webapp` as its working directory:
+For the publication experiment, compare:
 
-```text
-gunicorn --chdir webapp app:app --bind 0.0.0.0:$PORT --workers 1 --threads 2 --timeout 120
-```
+1. SCADA-only baseline.
+2. SCADA + Titas static/context features.
+3. SCADA + Titas context + validated physics residuals.
 
-The built-in Flask server is intended for local development and demonstrations.
+Report chronological F1, ROC-AUC, PR-AUC, false-positive rate, confusion matrix, and detection lead time when event timing supports it.
+
+**Historical-data warning:** Titas thesis values are reference information from 1999, not current 2026 operating specifications. Validate against current historian/GIS/well records before operational use.
 
 ## Data contract
 
-The input CSV must contain:
+The current demo SCADA input contains:
 
 ```text
 timestamp, segment_id, pressure, flow_rate, temperature,
@@ -88,4 +99,14 @@ valve_status, pump_state, pump_speed, compressor_state,
 energy_consumption, alarm_triggered, event_type, target
 ```
 
-Replace the file under `data/raw/` and restart the app to retrain the model.
+A Titas-enabled dataset additionally requires an approved `well_id` mapping. Real field deployment should obtain this mapping from authoritative historian/GIS/asset metadata rather than infer it from the demo topology.
+
+## Deployment
+
+The root `Procfile` uses Gunicorn:
+
+```text
+gunicorn --chdir webapp app:app --bind 0.0.0.0:$PORT --workers 1 --threads 2 --timeout 120
+```
+
+The built-in Flask server is intended for development and demonstration only.
