@@ -21,13 +21,13 @@ sys.path.insert(0, PROJECT_ROOT)
 RAW_DATA_PATH = os.path.join(PROJECT_ROOT, "data", "raw", "scada_pipeline.csv")
 REPAIRED_DATA_PATH = os.path.join(PROJECT_ROOT, "data", "processed", "scada_pipeline_repaired.csv")
 TITAS_SYNTHETIC_DATA_PATH = os.path.join(PROJECT_ROOT, "data", "raw", "titas_synthetic_scada.csv")
-# Generate the reproducible Titas research telemetry at startup when it is not
-# checked into the repository. This keeps the repository small and makes the
-# deployed app deterministic from the generator seed.
-if not os.path.exists(TITAS_SYNTHETIC_DATA_PATH):
-    from scripts.generate_titas_simulation import generate as generate_titas_simulation
-    generate_titas_simulation(TITAS_SYNTHETIC_DATA_PATH)
-DATA_PATH = TITAS_SYNTHETIC_DATA_PATH
+# The deployed service must not generate a large dataset during Gunicorn boot.
+# If the dataset is absent, keep a deterministic lightweight fallback so the
+# web process can start; the Titas generator can be run during build/development.
+if os.path.exists(TITAS_SYNTHETIC_DATA_PATH):
+    DATA_PATH = TITAS_SYNTHETIC_DATA_PATH
+else:
+    DATA_PATH = REPAIRED_DATA_PATH if os.path.exists(REPAIRED_DATA_PATH) else RAW_DATA_PATH
 
 CONFIG_PATH = os.path.join(PROJECT_ROOT, "config", "titas_scada.yml")
 TOPOLOGY_CONFIG_PATH = os.path.join(PROJECT_ROOT, "config", "demo_topology.yml")
@@ -42,7 +42,7 @@ alert_store = AlertStore(ALERT_DB_PATH)
 with open(TOPOLOGY_CONFIG_PATH, "r", encoding="utf-8") as topology_file:
     topology_config = yaml.safe_load(topology_file) or {}
 
-print(f"Loading Titas synthetic research dataset: {DATA_PATH}")
+print(f"Loading SCADA dataset: {DATA_PATH}")
 raw_df, data_quality = prepare_scada_file(DATA_PATH, CONFIG_PATH, require_labels=True)
 if MODEL_ARTIFACT_PATH and os.path.exists(MODEL_ARTIFACT_PATH):
     model, model_metadata = SCADARiskModel.load_artifact(MODEL_ARTIFACT_PATH)
@@ -73,17 +73,17 @@ _titas_status = {
     "installed": os.path.exists(TITAS_CONTEXT_PATH) and os.path.exists(TITAS_SENSITIVITY_PATH),
     "historical_source": "BUET Production System Analysis of the Titas Gas Field (1999)",
     "reference_wells": 11,
-    "dataset": "titas_synthetic_scada",
-    "dataset_is_simulated": True,
+    "dataset": "titas_synthetic_scada" if DATA_PATH == TITAS_SYNTHETIC_DATA_PATH else "legacy_scada_fallback",
+    "dataset_is_simulated": DATA_PATH == TITAS_SYNTHETIC_DATA_PATH,
     "dataset_rows": int(len(raw_df)),
     "well_count": int(raw_df["well_id"].nunique()) if _titas_has_well_ids else 0,
     "well_id_column_present": _titas_has_well_ids,
     "active": bool(_titas_has_well_ids and _titas_active_features),
     "active_feature_count": len(_titas_active_features),
     "active_features": _titas_active_features,
-    "mapping_required": False,
+    "mapping_required": False if _titas_has_well_ids else True,
     "physics_requires_bhp": "flowing_bottomhole_pressure_psia" not in raw_df.columns,
-    "topology_source": "synthetic_titas_research_mapping",
+    "topology_source": "synthetic_titas_research_mapping" if _titas_has_well_ids else topology_config.get("source", "demo"),
 }
 
 _segment_summary = (model.scored_history.groupby("segment_id").agg(
@@ -112,7 +112,7 @@ def api_titas_status(): return jsonify(_clean(_titas_status))
 def api_meta():
     cr = model.metrics.get("classification_report", {})
     return jsonify(_clean({
-        "dataset": {"rows": int(len(raw_df)), "segments": int(raw_df["segment_id"].nunique()), "wells": int(raw_df["well_id"].nunique()),
+        "dataset": {"rows": int(len(raw_df)), "segments": int(raw_df["segment_id"].nunique()), "wells": int(raw_df["well_id"].nunique()) if "well_id" in raw_df.columns else 0,
                      "time_start": str(raw_df["timestamp"].min()), "time_end": str(raw_df["timestamp"].max()),
                      "event_type_counts": raw_df["event_type"].value_counts().to_dict(), "data_quality": data_quality},
         "model": {"uses_xgboost": model.has_xgboost, "uses_shap": model.has_shap, "holdout_train_size": model.metrics.get("holdout_train_size"),
@@ -132,38 +132,86 @@ def api_operations():
     scored = model.scored_history.sort_values("timestamp")
     latest = scored.iloc[-1]
     alert_counts = scored["alert_level"].value_counts().to_dict()
-    rows = scored[scored["alert_level"] != "Normal"].tail(50).iloc[::-1]
-    detections = [{"timestamp": str(r["timestamp"]), "segment_id": int(r["segment_id"]), "risk_score_pct": float(r["risk_score_pct"]),
-                   "alert_level": r["alert_level"], "event_type": r.get("event_type", "unknown"), "pressure": float(r["pressure"]), "flow_rate": float(r["flow_rate"])}
-                  for _, r in rows.iterrows()]
+    detection_rows = scored[scored["alert_level"] != "Normal"].tail(50).iloc[::-1]
+    detections = []
+    for _, row in detection_rows.iterrows():
+        detections.append({"timestamp": str(row["timestamp"]), "segment_id": int(row["segment_id"]), "risk_score_pct": float(row["risk_score_pct"]),
+                           "alert_level": row["alert_level"], "event_type": row.get("event_type", "unknown"), "pressure": float(row["pressure"]), "flow_rate": float(row["flow_rate"])})
+    detections = alert_store.enrich(detections)
     return jsonify(_clean({"summary": {"latest_timestamp": str(latest["timestamp"]), "latest_segment_id": int(latest["segment_id"]),
-                                     "latest_risk_score": float(latest["risk_score_pct"]), "latest_alert_level": latest["alert_level"],
-                                     "critical_count": int(alert_counts.get("Critical Leak Threat", 0)), "warning_count": int(alert_counts.get("Warning", 0)), "normal_count": int(alert_counts.get("Normal", 0))},
-                          "detections": alert_store.enrich(detections), "segments": _segment_summary.to_dict(orient="records")}))
+                                      "latest_risk_score": float(latest["risk_score_pct"]), "latest_alert_level": latest["alert_level"],
+                                      "critical_count": int(alert_counts.get("Critical Leak Threat", 0)), "warning_count": int(alert_counts.get("Warning", 0)), "normal_count": int(alert_counts.get("Normal", 0))},
+                          "detections": detections, "segments": _segment_summary.to_dict(orient="records")}))
 
 @app.route("/api/topology")
 def api_topology():
-    segments = sorted(int(v) for v in raw_df["segment_id"].unique())
-    state = _segment_summary.set_index("segment_id").to_dict(orient="index")
+    segments = sorted(int(value) for value in raw_df["segment_id"].unique())
+    per_row = int(topology_config.get("segments_per_row", 25))
+    segment_state = _segment_summary.set_index("segment_id").to_dict(orient="index")
     nodes, edges = [], []
-    for i, sid in enumerate(segments):
-        row, col = divmod(i, int(topology_config.get("segments_per_row", 25)))
-        well = str(raw_df.loc[raw_df["segment_id"] == sid, "well_id"].iloc[0])
-        nodes.append({"id": f"segment-{sid}", "segment_id": sid, "well_id": well, "label": well, "x": 34 + col * 30, "y": 48 + row * 74,
-                      "last_risk_score": float(state[sid]["last_risk_score"]), "last_alert_level": state[sid]["last_alert_level"]})
-        if col > 0: edges.append({"from": f"segment-{segments[i-1]}", "to": f"segment-{sid}"})
-    return jsonify({"source": "synthetic_titas_research_mapping", "label": "TITAS SYNTHETIC RESEARCH NETWORK", "viewbox": [0,0,780,190], "nodes": nodes, "edges": edges})
+    for index, segment_id in enumerate(segments):
+        row, column = divmod(index, per_row)
+        well_id = None
+        if "well_id" in raw_df.columns:
+            matches = raw_df.loc[raw_df["segment_id"] == segment_id, "well_id"].dropna().astype(str).unique()
+            well_id = matches[0] if len(matches) else None
+        label = well_id or f"SEG-{segment_id:03d}"
+        nodes.append({"id": f"segment-{segment_id}", "segment_id": segment_id, "well_id": well_id, "label": label,
+                      "x": 34 + column * 30, "y": 48 + row * 74,
+                      "last_risk_score": float(segment_state[segment_id]["last_risk_score"]), "last_alert_level": segment_state[segment_id]["last_alert_level"]})
+        if column > 0: edges.append({"from": f"segment-{segments[index - 1]}", "to": f"segment-{segment_id}"})
+    return jsonify({"source": _titas_status["topology_source"], "label": "Titas synthetic research topology" if _titas_has_well_ids else topology_config.get("label", "DEMO SCHEMATIC"),
+                    "viewbox": [0, 0, 780, 190], "nodes": nodes, "edges": edges})
+
+@app.route("/api/alerts/<alert_key>/<action>", methods=["POST"])
+def api_alert_action(alert_key, action):
+    data = request.get_json(silent=True) or {}
+    try:
+        result = alert_store.update(alert_key, action, note=str(data.get("note", "")), actor=str(data.get("actor", "operator")))
+    except (KeyError, ValueError) as exc:
+        return jsonify({"error": str(exc)}), 404
+    return jsonify(result)
+
+@app.route("/api/export/data")
+def api_export_data():
+    export_df = raw_df
+    segment_id = request.args.get("segment_id", type=int)
+    if segment_id is not None: export_df = raw_df[raw_df["segment_id"] == segment_id]
+    response = Response(export_df.to_csv(index=False), mimetype="text/csv")
+    filename = "titas_synthetic_scada.csv" if segment_id is None and _titas_has_well_ids else ("scada_pipeline.csv" if segment_id is None else f"scada_segment_{segment_id}.csv")
+    response.headers["Content-Disposition"] = f"attachment; filename={filename}"
+    return response
 
 @app.route("/api/simulate/<int:segment_id>")
-def api_simulate(segment_id): return jsonify(_clean(model.segment_simulation(segment_id)))
+def api_simulate(segment_id):
+    if segment_id not in raw_df["segment_id"].unique(): return jsonify({"error": f"Unknown segment_id {segment_id}"}), 404
+    return jsonify(_clean(model.simulate_stream(segment_id)))
 
 @app.route("/api/predict", methods=["POST"])
-def api_predict(): return jsonify(_clean(model.predict_one(request.get_json(silent=True) or {})))
+def api_predict():
+    data = request.get_json(force=True) or {}
+    segment_id = data.pop("segment_id", None)
+    use_history = data.pop("use_history", False)
+    required = ["pressure", "flow_rate", "temperature", "valve_status", "pump_state", "pump_speed", "compressor_state", "energy_consumption"]
+    missing = [f for f in required if f not in data]
+    if missing: return jsonify({"error": f"Missing fields: {missing}"}), 400
+    data.setdefault("alarm_triggered", 0)
+    try:
+        if use_history and segment_id is not None:
+            segment_id = int(segment_id)
+            hist = raw_df[raw_df["segment_id"] == segment_id].sort_values("timestamp")
+            if hist.empty: return jsonify({"error": f"Unknown segment_id {segment_id}"}), 404
+            last_ts = pd.to_datetime(hist["timestamp"]).max()
+            reading_row = pd.DataFrame([data]); reading_row["timestamp"] = last_ts + pd.Timedelta(minutes=1); reading_row["segment_id"] = segment_id
+            if "well_id" in hist.columns: reading_row["well_id"] = hist["well_id"].iloc[-1]
+            if "flow_rate_mmscfd" in hist.columns: reading_row["flow_rate_mmscfd"] = data.get("flow_rate_mmscfd", data.get("flow_rate"))
+            window = pd.concat([hist, reading_row], ignore_index=True)
+            result = model.predict_pipeline_risk(window)
+        else:
+            result = model.predict_pipeline_risk(data, segment_id=int(segment_id) if segment_id is not None else 0)
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 400
+    return jsonify(_clean(result))
 
-@app.route("/api/report/<path:filename>")
-def api_report(filename):
-    path = os.path.join(PLOTS_DIR, filename)
-    if not os.path.isfile(path): return jsonify({"error": "Not found"}), 404
-    return Response(open(path, "rb").read(), mimetype="image/png")
-
-if __name__ == "__main__": app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5000")))
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5000, debug=False)
