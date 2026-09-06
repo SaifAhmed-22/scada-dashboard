@@ -1,0 +1,21 @@
+# Historical Titas gas properties extracted from the supplied BUET thesis.
+# Source: Production System Analysis of the Titas Gas Field (1999).
+# Historical/reference values only; not current 2026 operating specifications.
+
+gas_gravity_air_basis: 0.584
+critical_pressure_psia: 669.6
+critical_temperature_R: 351.2
+
+composition_mole_fraction:
+  H2: 0.0340
+  H2S: 0.0000
+  CO2: 0.0072
+  CH4: 0.9648
+  C2H6: 0.0160
+  C3H8: 0.0035
+  iC4: 0.0010
+  nC4: 0.0008
+  iC5: 0.0005
+  nC5: 0.0004
+  C6: 0.0005
+  C7_plus: 0.0019
