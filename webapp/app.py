@@ -130,7 +130,50 @@ def _clean(obj):
 @app.route("/")
 def index():
     page = render_template("index.html")
-    return page
+    titas_ui = r'''
+<style>
+.titas-status-panel { margin-bottom: var(--gap); border: 1px solid var(--hairline); background: var(--panel); }
+.titas-status-head { display:flex; align-items:center; justify-content:space-between; gap:16px; padding:12px 14px; border-bottom:1px solid var(--hairline); }
+.titas-status-title { font-size:11px; text-transform:uppercase; letter-spacing:.09em; color:var(--text-muted); font-weight:600; }
+.titas-status-badge { font-family:var(--font-mono); font-size:10px; padding:4px 8px; border-radius:20px; }
+.titas-status-badge.active { color:var(--normal); background:var(--normal-bg); border:1px solid var(--normal); }
+.titas-status-badge.inactive { color:var(--warning); background:var(--warning-bg); border:1px solid var(--warning); }
+.titas-status-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:1px; background:var(--hairline); }
+.titas-status-item { background:var(--panel-raised); padding:11px 12px; }
+.titas-status-item span { display:block; color:var(--text-dim); font-size:9px; text-transform:uppercase; letter-spacing:.05em; margin-bottom:4px; }
+.titas-status-item strong { font-family:var(--font-mono); font-size:12px; font-weight:500; color:var(--text); }
+.titas-status-note { padding:10px 14px; color:var(--text-muted); font-size:11px; line-height:1.5; border-top:1px solid var(--hairline); }
+@media (max-width:900px) { .titas-status-grid { grid-template-columns:repeat(2,1fr); } }
+</style>
+<script>
+(function(){
+  function esc(v){return String(v).replace(/[&<>\"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;'}[c];});}
+  function render(s){
+    var target=document.getElementById('view-model');
+    if(!target || document.getElementById('titas-status-panel')) return;
+    var active=!!s.active;
+    var badge=active?'ACTIVE':'REFERENCE / NOT MAPPED';
+    var note=active
+      ? 'Titas well context is currently contributing features to the model. Physics features remain gated by valid flowing bottomhole pressure.'
+      : 'The Titas research layer is installed, but the current demo SCADA data has no approved segment → TT-* well mapping. No Titas well identity is being guessed or applied.';
+    target.insertAdjacentHTML('afterbegin',
+      '<div class="titas-status-panel" id="titas-status-panel">'
+      +'<div class="titas-status-head"><span class="titas-status-title">Titas Research / Physics Layer</span><span class="titas-status-badge '+(active?'active':'inactive')+'">'+badge+'</span></div>'
+      +'<div class="titas-status-grid">'
+      +'<div class="titas-status-item"><span>Reference wells</span><strong>'+esc(s.reference_wells)+'</strong></div>'
+      +'<div class="titas-status-item"><span>Active Titas features</span><strong>'+esc(s.active_feature_count)+'</strong></div>'
+      +'<div class="titas-status-item"><span>Well ID in SCADA</span><strong>'+ (s.well_id_column_present?'YES':'NO') +'</strong></div>'
+      +'<div class="titas-status-item"><span>Physics BHP gate</span><strong>REQUIRED</strong></div>'
+      +'</div><div class="titas-status-note">'+esc(note)+' Source: '+esc(s.historical_source)+'. Historical data are research/reference inputs, not current operating setpoints.</div>'
+      +'</div>'
+    );
+  }
+  function load(){fetch('/api/titas-status').then(function(r){return r.json();}).then(render).catch(function(){});}
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',load); else load();
+})();
+</script>
+'''
+    return page.replace("</body>", titas_ui + "</body>")
 
 
 @app.route("/health")
