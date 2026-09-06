@@ -3,6 +3,7 @@
 # ============================================================
 
 import os
+import sys
 import json
 import numpy as np
 import pandas as pd
@@ -15,13 +16,19 @@ from scada_adapter import prepare_scada_file
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.dirname(BASE_DIR)
+sys.path.insert(0, PROJECT_ROOT)
+
 RAW_DATA_PATH = os.path.join(PROJECT_ROOT, "data", "raw", "scada_pipeline.csv")
 REPAIRED_DATA_PATH = os.path.join(PROJECT_ROOT, "data", "processed", "scada_pipeline_repaired.csv")
 TITAS_SYNTHETIC_DATA_PATH = os.path.join(PROJECT_ROOT, "data", "raw", "titas_synthetic_scada.csv")
-DATA_PATH = (
-    TITAS_SYNTHETIC_DATA_PATH if os.path.exists(TITAS_SYNTHETIC_DATA_PATH)
-    else (REPAIRED_DATA_PATH if os.path.exists(REPAIRED_DATA_PATH) else RAW_DATA_PATH)
-)
+# Generate the reproducible Titas research telemetry at startup when it is not
+# checked into the repository. This keeps the repository small and makes the
+# deployed app deterministic from the generator seed.
+if not os.path.exists(TITAS_SYNTHETIC_DATA_PATH):
+    from scripts.generate_titas_simulation import generate as generate_titas_simulation
+    generate_titas_simulation(TITAS_SYNTHETIC_DATA_PATH)
+DATA_PATH = TITAS_SYNTHETIC_DATA_PATH
+
 CONFIG_PATH = os.path.join(PROJECT_ROOT, "config", "titas_scada.yml")
 TOPOLOGY_CONFIG_PATH = os.path.join(PROJECT_ROOT, "config", "demo_topology.yml")
 TITAS_CONTEXT_PATH = os.path.join(PROJECT_ROOT, "data", "titas", "titas_well_context.csv")
@@ -35,7 +42,7 @@ alert_store = AlertStore(ALERT_DB_PATH)
 with open(TOPOLOGY_CONFIG_PATH, "r", encoding="utf-8") as topology_file:
     topology_config = yaml.safe_load(topology_file) or {}
 
-print(f"Loading dataset: {DATA_PATH}")
+print(f"Loading Titas synthetic research dataset: {DATA_PATH}")
 raw_df, data_quality = prepare_scada_file(DATA_PATH, CONFIG_PATH, require_labels=True)
 if MODEL_ARTIFACT_PATH and os.path.exists(MODEL_ARTIFACT_PATH):
     model, model_metadata = SCADARiskModel.load_artifact(MODEL_ARTIFACT_PATH)
@@ -57,8 +64,7 @@ TITAS_FEATURE_MARKERS = {
     "depth_to_perforation_ratio", "perforation_fraction_of_depth", "flowline_length_to_diameter_ratio",
     "tubing_length_to_diameter_ratio", "whp_vs_historical_ratio", "whp_delta_from_historical_psia",
     "wht_delta_from_historical_f", "flow_vs_historical_ratio", "flow_delta_from_historical_mmscfd",
-    "expected_flow_mmscfd_backpressure", "flow_residual_mmscfd", "flow_residual_ratio",
-    "absolute_flow_residual_ratio",
+    "expected_flow_mmscfd_backpressure", "flow_residual_mmscfd", "flow_residual_ratio", "absolute_flow_residual_ratio",
 }
 _model_feature_names = set(getattr(model, "feature_names", []) or [])
 _titas_active_features = sorted(_model_feature_names.intersection(TITAS_FEATURE_MARKERS))
@@ -67,23 +73,22 @@ _titas_status = {
     "installed": os.path.exists(TITAS_CONTEXT_PATH) and os.path.exists(TITAS_SENSITIVITY_PATH),
     "historical_source": "BUET Production System Analysis of the Titas Gas Field (1999)",
     "reference_wells": 11,
-    "dataset": "titas_synthetic_scada" if DATA_PATH == TITAS_SYNTHETIC_DATA_PATH else "legacy_demo",
-    "dataset_is_simulated": DATA_PATH == TITAS_SYNTHETIC_DATA_PATH,
+    "dataset": "titas_synthetic_scada",
+    "dataset_is_simulated": True,
     "dataset_rows": int(len(raw_df)),
     "well_count": int(raw_df["well_id"].nunique()) if _titas_has_well_ids else 0,
     "well_id_column_present": _titas_has_well_ids,
     "active": bool(_titas_has_well_ids and _titas_active_features),
     "active_feature_count": len(_titas_active_features),
     "active_features": _titas_active_features,
-    "mapping_required": not _titas_has_well_ids,
+    "mapping_required": False,
     "physics_requires_bhp": "flowing_bottomhole_pressure_psia" not in raw_df.columns,
-    "topology_source": topology_config.get("source", "demo"),
+    "topology_source": "synthetic_titas_research_mapping",
 }
 
 _segment_summary = (model.scored_history.groupby("segment_id").agg(
-    num_readings=("risk_score_pct", "count"), num_incidents=("target", "sum"),
-    max_risk_score=("risk_score_pct", "max"), last_alert_level=("alert_level", "last"),
-    last_risk_score=("risk_score_pct", "last"), last_timestamp=("timestamp", "last"),
+    num_readings=("risk_score_pct", "count"), num_incidents=("target", "sum"), max_risk_score=("risk_score_pct", "max"),
+    last_alert_level=("alert_level", "last"), last_risk_score=("risk_score_pct", "last"), last_timestamp=("timestamp", "last"),
 ).reset_index().sort_values(["num_incidents", "max_risk_score"], ascending=False))
 
 def _clean(obj):
@@ -95,9 +100,7 @@ def _clean(obj):
     return obj
 
 @app.route("/")
-def index():
-    page = render_template("index.html")
-    return page
+def index(): return render_template("index.html")
 
 @app.route("/health")
 def health(): return jsonify({"status": "ok"}), 200
@@ -109,15 +112,13 @@ def api_titas_status(): return jsonify(_clean(_titas_status))
 def api_meta():
     cr = model.metrics.get("classification_report", {})
     return jsonify(_clean({
-        "dataset": {"rows": int(len(raw_df)), "segments": int(raw_df["segment_id"].nunique()),
+        "dataset": {"rows": int(len(raw_df)), "segments": int(raw_df["segment_id"].nunique()), "wells": int(raw_df["well_id"].nunique()),
                      "time_start": str(raw_df["timestamp"].min()), "time_end": str(raw_df["timestamp"].max()),
                      "event_type_counts": raw_df["event_type"].value_counts().to_dict(), "data_quality": data_quality},
-        "model": {"uses_xgboost": model.has_xgboost, "uses_shap": model.has_shap,
-                  "holdout_train_size": model.metrics.get("holdout_train_size"), "holdout_test_size": model.metrics.get("holdout_test_size"),
-                  "holdout_auc": model.metrics.get("holdout_auc"), "cv_f1_mean": model.metrics.get("cv_f1_mean"),
-                  "cv_folds": model.metrics.get("cv_folds"), "anomaly_only_auc": model.metrics.get("anomaly_only_auc"),
-                  "precision_anomalous": cr.get("1", {}).get("precision"), "recall_anomalous": cr.get("1", {}).get("recall"),
-                  "f1_anomalous": cr.get("1", {}).get("f1-score")},
+        "model": {"uses_xgboost": model.has_xgboost, "uses_shap": model.has_shap, "holdout_train_size": model.metrics.get("holdout_train_size"),
+                  "holdout_test_size": model.metrics.get("holdout_test_size"), "holdout_auc": model.metrics.get("holdout_auc"),
+                  "cv_f1_mean": model.metrics.get("cv_f1_mean"), "cv_folds": model.metrics.get("cv_folds"), "anomaly_only_auc": model.metrics.get("anomaly_only_auc"),
+                  "precision_anomalous": cr.get("1", {}).get("precision"), "recall_anomalous": cr.get("1", {}).get("recall"), "f1_anomalous": cr.get("1", {}).get("f1-score")},
         "titas": _titas_status,
         "risk_weights": {"classifier_weight": model.RISK_WEIGHT_CLASSIFIER, "anomaly_weight": model.RISK_WEIGHT_ANOMALY, "alert_thresholds": model.ALERT_THRESHOLDS},
         "top_features": [{"feature": f, "importance": round(float(v), 4)} for f, v in model.feature_importances.head(10).items()],
@@ -132,29 +133,32 @@ def api_operations():
     latest = scored.iloc[-1]
     alert_counts = scored["alert_level"].value_counts().to_dict()
     rows = scored[scored["alert_level"] != "Normal"].tail(50).iloc[::-1]
-    detections = [{"timestamp": str(r["timestamp"]), "segment_id": int(r["segment_id"]), "risk_score_pct": float(r["risk_score_pct"]), "alert_level": r["alert_level"], "event_type": r.get("event_type", "unknown"), "pressure": float(r["pressure"]), "flow_rate": float(r["flow_rate"])} for _, r in rows.iterrows()]
-    return jsonify(_clean({"summary": {"latest_timestamp": str(latest["timestamp"]), "latest_segment_id": int(latest["segment_id"]), "latest_risk_score": float(latest["risk_score_pct"]), "latest_alert_level": latest["alert_level"], "critical_count": int(alert_counts.get("Critical Leak Threat", 0)), "warning_count": int(alert_counts.get("Warning", 0)), "normal_count": int(alert_counts.get("Normal", 0))}, "detections": alert_store.enrich(detections), "segments": _segment_summary.to_dict(orient="records")}))
+    detections = [{"timestamp": str(r["timestamp"]), "segment_id": int(r["segment_id"]), "risk_score_pct": float(r["risk_score_pct"]),
+                   "alert_level": r["alert_level"], "event_type": r.get("event_type", "unknown"), "pressure": float(r["pressure"]), "flow_rate": float(r["flow_rate"])}
+                  for _, r in rows.iterrows()]
+    return jsonify(_clean({"summary": {"latest_timestamp": str(latest["timestamp"]), "latest_segment_id": int(latest["segment_id"]),
+                                     "latest_risk_score": float(latest["risk_score_pct"]), "latest_alert_level": latest["alert_level"],
+                                     "critical_count": int(alert_counts.get("Critical Leak Threat", 0)), "warning_count": int(alert_counts.get("Warning", 0)), "normal_count": int(alert_counts.get("Normal", 0))},
+                          "detections": alert_store.enrich(detections), "segments": _segment_summary.to_dict(orient="records")}))
 
 @app.route("/api/topology")
 def api_topology():
     segments = sorted(int(v) for v in raw_df["segment_id"].unique())
     state = _segment_summary.set_index("segment_id").to_dict(orient="index")
     nodes, edges = [], []
-    per_row = int(topology_config.get("segments_per_row", 25))
     for i, sid in enumerate(segments):
-        row, col = divmod(i, per_row)
-        nodes.append({"id": f"segment-{sid}", "segment_id": sid, "label": f"SEG-{sid:03d}", "x": 34 + col * 30, "y": 48 + row * 74, "last_risk_score": float(state[sid]["last_risk_score"]), "last_alert_level": state[sid]["last_alert_level"]})
+        row, col = divmod(i, int(topology_config.get("segments_per_row", 25)))
+        well = str(raw_df.loc[raw_df["segment_id"] == sid, "well_id"].iloc[0])
+        nodes.append({"id": f"segment-{sid}", "segment_id": sid, "well_id": well, "label": well, "x": 34 + col * 30, "y": 48 + row * 74,
+                      "last_risk_score": float(state[sid]["last_risk_score"]), "last_alert_level": state[sid]["last_alert_level"]})
         if col > 0: edges.append({"from": f"segment-{segments[i-1]}", "to": f"segment-{sid}"})
-    return jsonify({"source": topology_config.get("source", "demo"), "label": topology_config.get("label", "DEMO SCHEMATIC"), "viewbox": [0, 0, 780, 190], "nodes": nodes, "edges": edges})
+    return jsonify({"source": "synthetic_titas_research_mapping", "label": "TITAS SYNTHETIC RESEARCH NETWORK", "viewbox": [0,0,780,190], "nodes": nodes, "edges": edges})
 
 @app.route("/api/simulate/<int:segment_id>")
-def api_simulate(segment_id):
-    return jsonify(_clean(model.segment_simulation(segment_id)))
+def api_simulate(segment_id): return jsonify(_clean(model.segment_simulation(segment_id)))
 
 @app.route("/api/predict", methods=["POST"])
-def api_predict():
-    payload = request.get_json(silent=True) or {}
-    return jsonify(_clean(model.predict_one(payload)))
+def api_predict(): return jsonify(_clean(model.predict_one(request.get_json(silent=True) or {})))
 
 @app.route("/api/report/<path:filename>")
 def api_report(filename):
@@ -162,5 +166,4 @@ def api_report(filename):
     if not os.path.isfile(path): return jsonify({"error": "Not found"}), 404
     return Response(open(path, "rb").read(), mimetype="image/png")
 
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5000")))
+if __name__ == "__main__": app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5000")))
