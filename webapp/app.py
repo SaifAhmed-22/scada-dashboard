@@ -10,8 +10,15 @@ import pandas as pd
 import yaml
 from flask import Flask, Response, render_template, jsonify, request
 
-from alert_store import AlertStore
+# Render's free 512 MiB service must not spend its limited memory on optional
+# training-time extras. The research pipeline itself remains unchanged locally.
+DEPLOYMENT_MODE = os.getenv("SCADA_DEPLOYMENT_MODE", "0").lower() in {"1", "true", "yes"}
+import model_pipeline as model_pipeline_module
+if DEPLOYMENT_MODE:
+    model_pipeline_module.HAS_XGBOOST = False
+    model_pipeline_module.HAS_SHAP = False
 from model_pipeline import SCADARiskModel
+from alert_store import AlertStore
 from scada_adapter import prepare_scada_file
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -37,6 +44,10 @@ PLOTS_DIR = os.path.join(BASE_DIR, "static", "img")
 MODEL_ARTIFACT_PATH = os.getenv("PIPELINE_RISK_MODEL_PATH")
 ALERT_DB_PATH = os.getenv("PIPELINE_RISK_ALERT_DB", os.path.join(PROJECT_ROOT, "data", "runtime", "alerts.db"))
 
+# Keep the browser responsive. The full scored history remains on the server;
+# only the interactive replay payload is reduced to a bounded number of points.
+MAX_SIMULATION_POINTS = int(os.getenv("MAX_SIMULATION_POINTS", "600"))
+
 app = Flask(__name__)
 alert_store = AlertStore(ALERT_DB_PATH)
 with open(TOPOLOGY_CONFIG_PATH, "r", encoding="utf-8") as topology_file:
@@ -57,7 +68,11 @@ if "pressure" not in model.scored_history.columns or "flow_rate" not in model.sc
     if len(raw_history) == len(model.scored_history):
         model.scored_history["pressure"] = raw_history["pressure"].to_numpy()
         model.scored_history["flow_rate"] = raw_history["flow_rate"].to_numpy()
-model.save_report_plots(PLOTS_DIR)
+
+# Report plots are useful for the research artifact but expensive and unnecessary
+# on every web-server boot. Render deployment serves the dashboard metrics instead.
+if not DEPLOYMENT_MODE:
+    model.save_report_plots(PLOTS_DIR)
 
 TITAS_FEATURE_MARKERS = {
     "tubing_area_min_in2", "tubing_area_max_in2", "flowline_area_min_in2", "flowline_area_max_in2",
@@ -99,11 +114,20 @@ def _clean(obj):
     if isinstance(obj, (list, tuple)): return [_clean(v) for v in obj]
     return obj
 
+def _bounded_series(rows, limit):
+    """Downsample an ordered list while always preserving first and last rows."""
+    if len(rows) <= limit:
+        return rows
+    if limit < 2:
+        return rows[-1:]
+    indices = np.linspace(0, len(rows) - 1, limit, dtype=int)
+    return [rows[int(i)] for i in indices]
+
 @app.route("/")
 def index(): return render_template("index.html")
 
 @app.route("/health")
-def health(): return jsonify({"status": "ok"}), 200
+def health(): return jsonify({"status": "ok", "deployment_mode": DEPLOYMENT_MODE}), 200
 
 @app.route("/api/titas-status")
 def api_titas_status(): return jsonify(_clean(_titas_status))
@@ -185,7 +209,10 @@ def api_export_data():
 @app.route("/api/simulate/<int:segment_id>")
 def api_simulate(segment_id):
     if segment_id not in raw_df["segment_id"].unique(): return jsonify({"error": f"Unknown segment_id {segment_id}"}), 404
-    return jsonify(_clean(model.simulate_stream(segment_id)))
+    stream = model.simulate_stream(segment_id)
+    # Keep all research/scoring data server-side but send a bounded replay to
+    # Chart.js. This prevents 15k+ labels/points from freezing the browser.
+    return jsonify(_clean(_bounded_series(stream, MAX_SIMULATION_POINTS)))
 
 @app.route("/api/predict", methods=["POST"])
 def api_predict():
