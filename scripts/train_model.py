@@ -16,8 +16,7 @@ sys.path.insert(0, str(WEBAPP_DIR))
 from model_pipeline import SCADARiskModel  # noqa: E402
 from scada_adapter import prepare_scada_file  # noqa: E402
 
-
-DEFAULT_DATA = PROJECT_ROOT / "data" / "processed" / "scada_pipeline_repaired.csv"
+DEFAULT_DATA = PROJECT_ROOT / "data" / "raw" / "titas_synthetic_scada.csv"
 DEFAULT_CONFIG = PROJECT_ROOT / "config" / "titas_scada.yml"
 DEFAULT_MODEL = PROJECT_ROOT / "artifacts" / "models" / "pipeline_risk_model.pkl"
 DEFAULT_METRICS = PROJECT_ROOT / "artifacts" / "models" / "pipeline_risk_metrics.json"
@@ -37,20 +36,18 @@ def main() -> None:
     parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG)
     parser.add_argument("--model", type=Path, default=DEFAULT_MODEL)
     parser.add_argument("--metrics", type=Path, default=DEFAULT_METRICS)
-    parser.add_argument(
-        "--allow-collisions",
-        action="store_true",
-        help="Train despite same-segment timestamp collisions; use only after source review.",
-    )
+    parser.add_argument("--allow-collisions", action="store_true")
     args = parser.parse_args()
 
+    if not args.data.exists():
+        raise FileNotFoundError(
+            f"Dataset not found: {args.data}. Run scripts/generate_titas_simulation.py first."
+        )
     frame, quality = prepare_scada_file(args.data, args.config, require_labels=True)
     collisions = quality.get("timestamp_collision_rows", 0)
     if collisions and not args.allow_collisions:
         raise ValueError(
-            f"Refusing to train: {collisions} rows belong to ambiguous same-segment "
-            "timestamps. Repair the source data or rerun with --allow-collisions "
-            "after review."
+            f"Refusing to train: {collisions} rows belong to ambiguous same-segment timestamps."
         )
     if frame["target"].nunique() < 2:
         raise ValueError("Training data must contain both target classes")
@@ -61,6 +58,7 @@ def main() -> None:
         "data_path": str(args.data),
         "data_sha256": file_sha256(args.data),
         "config_path": str(args.config),
+        "dataset_status": "simulated_titas_research_data",
         "rows_used": len(frame),
         "data_quality": quality,
         "model_features": model.feature_columns,
@@ -71,10 +69,10 @@ def main() -> None:
     args.metrics.write_text(json.dumps(metadata, indent=2, default=str), encoding="utf-8")
 
     print(f"Validated rows: {len(frame)}")
+    print(f"Wells: {frame['well_id'].nunique()}")
     print(f"Invalid rate: {quality['invalid_rate']:.2%}")
     print(f"Holdout AUC: {model.metrics.get('holdout_auc')}")
     print(f"Saved model: {args.model}")
-    print(f"Saved metrics: {args.metrics}")
 
 
 if __name__ == "__main__":
