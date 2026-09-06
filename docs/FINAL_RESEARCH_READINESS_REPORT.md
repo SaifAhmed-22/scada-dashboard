@@ -6,7 +6,9 @@
 
 ## Executive status
 
-The repository has been consolidated around one importable ML pipeline and an optional Titas historical/context layer. The Titas integration has been merged into `main` through PR #1. The repository now separates source data, processed data, Titas reference data, configuration, documentation, scripts, tests, artifacts, and the Flask application.
+The repository has been consolidated around one importable ML pipeline and an optional Titas historical/context layer. The Titas integration has been merged into `main`. The repository separates source data, processed data, Titas reference data, configuration, documentation, scripts, tests, artifacts, and the Flask application.
+
+The dashboard now exposes a **Titas Research / Physics Layer** status panel so that installation, well-ID availability, active feature count, and the BHP requirement are visible rather than silently hidden.
 
 ## What was completed
 
@@ -30,6 +32,14 @@ The repository has been consolidated around one importable ML pipeline and an op
 - `scripts/augment_scada_with_titas.py`: explicit-well-id augmentation utility.
 - `tests/test_titas_context.py`: Titas-layer unit tests.
 - `docs/titas_physics_layer.md`: integration and research protocol.
+
+### Dashboard integration
+
+- `/api/meta` now exposes Titas-layer status.
+- `/api/titas-status` provides a dedicated machine-readable status endpoint.
+- The Model Performance view displays a Titas Research / Physics Layer panel.
+- The panel distinguishes **ACTIVE** from **REFERENCE / NOT MAPPED**.
+- The panel explicitly shows whether the current SCADA data contains `well_id` and how many Titas features are active.
 
 ### Repository cleanup
 
@@ -126,6 +136,7 @@ The key research claim should be conditional on the experiment: **whether field-
 **Research architecture:** Good foundation.  
 **Titas integration:** Implemented but intentionally conditional on authoritative well IDs.  
 **Physics integration:** Partially implemented; requires validated flowing BHP for residual features.  
+**Dashboard observability:** Improved; the live UI now reports whether the Titas layer is installed and whether it is actually active.  
 **Reproducibility:** Good structure; final paper still needs pinned environment/version metadata and experiment manifests.  
 **Publication readiness:** Not yet sufficient for a performance claim until real/validated data, labeling, ablation results, and leakage checks are completed.
 
