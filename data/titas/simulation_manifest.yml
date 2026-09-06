@@ -1,0 +1,21 @@
+dataset_name: titas_synthetic_scada_research
+status: simulated
+field_data: false
+purpose: research_development_and_ablation
+source_parameter_reference: data/titas/titas_well_context.csv
+seed: 20260906
+cadence: 1min
+duration_per_well_days: 2
+wells: 11
+mapping: synthetic_only
+mapping_rule: SEG-001 -> TT-1 through SEG-011 -> TT-11
+leak_events: 3 per well
+non_leak_disturbances: blockage and pump_trip
+labels:
+  target_1: leak_or_blockage
+  target_0: normal_or_equipment_disturbance
+physics:
+  equation: Qsc = C * (PR^2 - Pwf^2)^n
+  requires_flowing_bottomhole_pressure: true
+  historical_parameters_used_as_reference: true
+important_warning: This dataset must never be described as real Titas SCADA telemetry. It is a reproducible simulation parameterized by historical Titas well context.
