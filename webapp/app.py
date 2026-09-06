@@ -26,6 +26,8 @@ REPAIRED_DATA_PATH = os.path.join(PROJECT_ROOT, "data", "processed", "scada_pipe
 DATA_PATH = REPAIRED_DATA_PATH if os.path.exists(REPAIRED_DATA_PATH) else RAW_DATA_PATH
 CONFIG_PATH = os.path.join(PROJECT_ROOT, "config", "titas_scada.yml")
 TOPOLOGY_CONFIG_PATH = os.path.join(PROJECT_ROOT, "config", "demo_topology.yml")
+TITAS_CONTEXT_PATH = os.path.join(PROJECT_ROOT, "data", "titas", "titas_well_context.csv")
+TITAS_SENSITIVITY_PATH = os.path.join(PROJECT_ROOT, "data", "titas", "titas_sensitivity_curves.csv")
 PLOTS_DIR = os.path.join(BASE_DIR, "static", "img")
 MODEL_ARTIFACT_PATH = os.getenv("PIPELINE_RISK_MODEL_PATH")
 ALERT_DB_PATH = os.getenv(
@@ -61,6 +63,39 @@ model.save_report_plots(PLOTS_DIR)
 print(f"Model ready. Holdout AUC={model.metrics.get('holdout_auc')}, "
       f"CV F1={model.metrics.get('cv_f1_mean')}")
 
+# Titas research-layer status is intentionally explicit. We never infer a
+# segment_id -> TT-* mapping from the demo topology.
+TITAS_FEATURE_MARKERS = {
+    "tubing_area_min_in2", "tubing_area_max_in2",
+    "flowline_area_min_in2", "flowline_area_max_in2",
+    "depth_to_perforation_ratio", "perforation_fraction_of_depth",
+    "flowline_length_to_diameter_ratio", "tubing_length_to_diameter_ratio",
+    "whp_vs_historical_ratio", "whp_delta_from_historical_psia",
+    "wht_delta_from_historical_f", "flow_vs_historical_ratio",
+    "flow_delta_from_historical_mmscfd",
+    "expected_flow_mmscfd_backpressure", "flow_residual_mmscfd",
+    "flow_residual_ratio", "absolute_flow_residual_ratio",
+}
+_model_feature_names = set(getattr(model, "feature_names", []) or [])
+_titas_active_features = sorted(_model_feature_names.intersection(TITAS_FEATURE_MARKERS))
+_titas_has_well_ids = "well_id" in raw_df.columns
+_titas_context_exists = os.path.exists(TITAS_CONTEXT_PATH)
+_titas_sensitivity_exists = os.path.exists(TITAS_SENSITIVITY_PATH)
+_titas_status = {
+    "installed": bool(_titas_context_exists and _titas_sensitivity_exists),
+    "historical_source": "BUET Production System Analysis of the Titas Gas Field (1999)",
+    "reference_wells": 11,
+    "context_file_present": _titas_context_exists,
+    "sensitivity_file_present": _titas_sensitivity_exists,
+    "well_id_column_present": _titas_has_well_ids,
+    "active": bool(_titas_has_well_ids and _titas_active_features),
+    "active_feature_count": len(_titas_active_features),
+    "active_features": _titas_active_features,
+    "mapping_required": not _titas_has_well_ids,
+    "physics_requires_bhp": True,
+    "topology_source": topology_config.get("source", "demo"),
+}
+
 # Precompute the segment picker table once (cheap, 50 rows)
 _segment_summary = (
     model.scored_history.groupby("segment_id")
@@ -94,7 +129,8 @@ def _clean(obj):
 
 @app.route("/")
 def index():
-    return render_template("index.html")
+    page = render_template("index.html")
+    return page
 
 
 @app.route("/health")
@@ -127,6 +163,7 @@ def api_meta():
             "recall_anomalous": cr.get("1", {}).get("recall"),
             "f1_anomalous": cr.get("1", {}).get("f1-score"),
         },
+        "titas": _titas_status,
         "risk_weights": {
             "classifier_weight": model.RISK_WEIGHT_CLASSIFIER,
             "anomaly_weight": model.RISK_WEIGHT_ANOMALY,
@@ -138,6 +175,11 @@ def api_meta():
         ],
     }
     return jsonify(_clean(payload))
+
+
+@app.route("/api/titas-status")
+def api_titas_status():
+    return jsonify(_clean(_titas_status))
 
 
 @app.route("/api/segments")
