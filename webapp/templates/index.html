@@ -15,7 +15,7 @@
   <div class="topbar-brand">
     <span class="mark">SCADA</span>
     <h1>Pipeline Risk Monitor</h1>
-    <span class="sub">Gas distribution network — real-time leak &amp; anomaly risk</span>
+    <span class="sub">Historical demo replay — not live SCADA</span>
   </div>
   <div class="topbar-status">
     <span class="clock" id="clock">--:--:--</span>
@@ -25,7 +25,7 @@
 </header>
 
 <nav class="tabs">
-  <button class="tab-btn active" data-view="monitor">Live Monitor</button>
+  <button class="tab-btn active" data-view="monitor">Historical Replay</button>
   <button class="tab-btn" data-view="whatif">What-If Simulator</button>
   <button class="tab-btn" data-view="model">Model Performance</button>
 </nav>
@@ -265,6 +265,17 @@
 <!-- ============================================================ -->
 <section class="view" id="view-model">
   <div class="metrics-grid" id="metrics-grid"></div>
+
+  <div class="panel titas-status-panel">
+    <div class="panel-head">
+      <h2>Titas Research / Physics Layer</h2>
+      <span class="quality-state" id="titas-status-label">Checking</span>
+    </div>
+    <div class="panel-body">
+      <p id="titas-status-message">Checking whether Titas reference features are active...</p>
+      <div class="titas-status-grid" id="titas-status-details"></div>
+    </div>
+  </div>
 
   <div class="panel" style="margin-bottom: var(--gap);">
     <div class="panel-head"><h2>Top Feature Importances</h2></div>

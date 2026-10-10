@@ -22,7 +22,7 @@ from sklearn.model_selection import TimeSeriesSplit
 from sklearn.preprocessing import StandardScaler, MinMaxScaler
 from sklearn.ensemble import IsolationForest, RandomForestClassifier
 from sklearn.metrics import (classification_report, confusion_matrix,
-                              roc_auc_score, f1_score)
+                              average_precision_score, roc_auc_score, f1_score)
 
 try:
     from xgboost import XGBClassifier
@@ -37,6 +37,20 @@ except ImportError:
     HAS_SHAP = False
 
 RANDOM_STATE = 42
+
+
+def _grouped_time_series_splits(timestamps, n_splits):
+    """Create chronological folds without separating rows sharing a timestamp."""
+    timestamps = pd.Series(pd.to_datetime(timestamps)).reset_index(drop=True)
+    unique_timestamps = timestamps.drop_duplicates().sort_values(ignore_index=True)
+    splitter = TimeSeriesSplit(n_splits=n_splits)
+
+    for train_time_indices, validation_time_indices in splitter.split(unique_timestamps):
+        train_times = unique_timestamps.iloc[train_time_indices]
+        validation_times = unique_timestamps.iloc[validation_time_indices]
+        train_indices = np.flatnonzero(timestamps.isin(train_times).to_numpy())
+        validation_indices = np.flatnonzero(timestamps.isin(validation_times).to_numpy())
+        yield train_indices, validation_indices
 
 
 def _positive_class_shap(sv):
@@ -215,7 +229,9 @@ class SCADARiskModel:
         # --- TimeSeriesSplit CV (diagnostic only) ---
         tscv = TimeSeriesSplit(n_splits=5)
         cv_f1 = []
-        for tr_idx, va_idx in tscv.split(X_all):
+        for tr_idx, va_idx in _grouped_time_series_splits(
+            sorted_df["timestamp"], n_splits=tscv.n_splits
+        ):
             y_tr, y_va = y_all.iloc[tr_idx], y_all.iloc[va_idx]
             if y_tr.nunique() < 2:
                 continue
@@ -239,9 +255,8 @@ class SCADARiskModel:
         X_train_if_scaled = self.if_scaler.transform(X_train_if)
         X_test_if_scaled = self.if_scaler.transform(X_test_if)
 
-        train_anomaly_rate = float(np.clip(y_train.mean(), 0.01, 0.49))
         self.iso_forest = IsolationForest(
-            n_estimators=200, contamination=train_anomaly_rate, random_state=RANDOM_STATE
+            n_estimators=200, contamination="auto", random_state=RANDOM_STATE
         )
         self.iso_forest.fit(X_train_if_scaled)
 
@@ -283,6 +298,13 @@ class SCADARiskModel:
 
         self.metrics["holdout_train_size"] = int(len(X_train_clf))
         self.metrics["holdout_test_size"] = int(len(X_test_clf))
+        self.metrics["holdout_cutoff_timestamp"] = pd.Timestamp(cutoff).isoformat()
+        self.metrics["holdout_start_timestamp"] = pd.Timestamp(
+            test_df["timestamp"].min()
+        ).isoformat()
+        self.metrics["holdout_end_timestamp"] = pd.Timestamp(
+            test_df["timestamp"].max()
+        ).isoformat()
         self.metrics["classification_report"] = classification_report(
             y_test, y_pred, digits=3, zero_division=0, output_dict=True
         )
@@ -290,6 +312,9 @@ class SCADARiskModel:
             self.metrics["holdout_auc"] = float(roc_auc_score(y_test, y_proba))
         except ValueError:
             self.metrics["holdout_auc"] = None
+        self.metrics["holdout_average_precision"] = float(
+            average_precision_score(y_test, y_proba)
+        )
         self.metrics["confusion_matrix"] = confusion_matrix(y_test, y_pred).tolist()
 
         self.feature_importances = pd.Series(

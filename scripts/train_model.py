@@ -5,15 +5,21 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import platform
 import sys
 from datetime import datetime, timezone
+from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
+
+import numpy as np
+import pandas as pd
+import sklearn
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 WEBAPP_DIR = PROJECT_ROOT / "webapp"
 sys.path.insert(0, str(WEBAPP_DIR))
 
-from model_pipeline import SCADARiskModel  # noqa: E402
+from model_pipeline import RANDOM_STATE, SCADARiskModel  # noqa: E402
 from scada_adapter import prepare_scada_file  # noqa: E402
 
 
@@ -29,6 +35,13 @@ def file_sha256(path: Path) -> str:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def installed_version(distribution: str) -> str | None:
+    try:
+        return version(distribution)
+    except PackageNotFoundError:
+        return None
 
 
 def main() -> None:
@@ -56,15 +69,49 @@ def main() -> None:
         raise ValueError("Training data must contain both target classes")
 
     model = SCADARiskModel().fit(frame)
+    holdout_metrics = model.metrics
     metadata = {
         "trained_at": datetime.now(timezone.utc).isoformat(),
         "data_path": str(args.data),
         "data_sha256": file_sha256(args.data),
         "config_path": str(args.config),
+        "config_sha256": file_sha256(args.config),
         "rows_used": len(frame),
         "data_quality": quality,
         "model_features": model.feature_columns,
-        "metrics": model.metrics,
+        "model_configuration": {
+            "classifier": type(model.clf).__name__,
+            "classifier_parameters": model.clf.get_params(deep=False),
+            "isolation_forest": {
+                "n_estimators": model.iso_forest.n_estimators,
+                "contamination": model.iso_forest.contamination,
+                "random_state": model.iso_forest.random_state,
+            },
+            "random_state": RANDOM_STATE,
+            "feature_columns": model.feature_columns,
+        },
+        "evaluation": {
+            "split_method": "chronological holdout; CV folds grouped by timestamp",
+            "holdout_cutoff_timestamp": holdout_metrics["holdout_cutoff_timestamp"],
+            "holdout_start_timestamp": holdout_metrics["holdout_start_timestamp"],
+            "holdout_end_timestamp": holdout_metrics["holdout_end_timestamp"],
+            "holdout_train_size": holdout_metrics["holdout_train_size"],
+            "holdout_test_size": holdout_metrics["holdout_test_size"],
+            "metrics": holdout_metrics,
+        },
+        "environment": {
+            "python": sys.version.split()[0],
+            "platform": platform.platform(),
+            "packages": {
+                "numpy": np.__version__,
+                "pandas": pd.__version__,
+                "scikit-learn": sklearn.__version__,
+                "xgboost": installed_version("xgboost"),
+                "shap": installed_version("shap"),
+                "Flask": installed_version("Flask"),
+                "PyYAML": installed_version("PyYAML"),
+            },
+        },
     }
     model.save_artifact(args.model, metadata)
     args.metrics.parent.mkdir(parents=True, exist_ok=True)

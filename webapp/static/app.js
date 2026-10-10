@@ -56,11 +56,51 @@ document.addEventListener("DOMContentLoaded", () => {
   setupPlaybackControls();
   setupWhatIfForm();
   loadMeta();
+  loadTitasStatus();
   loadSegments();
   loadOperations();
   loadTopology();
   setupAlertActions();
 });
+
+async function loadTitasStatus() {
+  const label = document.getElementById("titas-status-label");
+  const message = document.getElementById("titas-status-message");
+  const details = document.getElementById("titas-status-details");
+
+  try {
+    const response = await fetch("/api/titas-status");
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const status = await response.json();
+    const statusLabels = {
+      active: "Active",
+      well_id_present_not_used: "Not in model",
+      reference_not_mapped: "Reference / not mapped",
+    };
+    label.textContent = statusLabels[status.status] || "Unknown";
+    label.className = `quality-state ${status.status === "active" ? "normal" : "warning"}`;
+    message.textContent = status.message;
+
+    const rows = [
+      ["Historical reference files", status.context_data_available ? "Available" : "Missing"],
+      ["SCADA well_id", status.well_id_available ? "Present" : "Not mapped"],
+      ["Active model features", status.active_feature_count],
+      [
+        "Flowing bottomhole pressure",
+        status.flowing_bottomhole_pressure_available ? "Available" : "Not available",
+      ],
+      ["Reference data", status.historical_reference_only ? "Historical only" : "Current"],
+    ];
+    details.innerHTML = rows
+      .map(([name, value]) => `<div class="titas-status-item"><span>${escapeHtml(name)}</span><strong>${escapeHtml(value)}</strong></div>`)
+      .join("");
+  } catch (error) {
+    label.textContent = "Unavailable";
+    label.className = "quality-state warning";
+    message.textContent = `Could not load Titas layer status: ${error.message}`;
+    details.replaceChildren();
+  }
+}
 
 function startClock() {
   const el = document.getElementById("clock");
@@ -126,11 +166,18 @@ function renderDataQuality(quality) {
 
 function renderModelView(meta) {
   const grid = document.getElementById("metrics-grid");
+  const benchmark = meta.benchmark || null;
   const tiles = [
     {
       label: "Holdout AUC",
       value: meta.model.holdout_auc !== null ? meta.model.holdout_auc.toFixed(3) : "—",
       note: `${meta.model.holdout_train_size} train / ${meta.model.holdout_test_size} test (chronological)`,
+    },
+    {
+      label: "Holdout PR-AUC (AP)",
+      value: meta.model.holdout_average_precision !== null && meta.model.holdout_average_precision !== undefined
+        ? meta.model.holdout_average_precision.toFixed(3) : "—",
+      note: "Average precision on the chronological holdout",
     },
     {
       label: "TimeSeriesSplit F1",
@@ -150,6 +197,19 @@ function renderModelView(meta) {
         ? meta.model.precision_anomalous.toFixed(3) : "—"}`,
     },
   ];
+
+  if (benchmark) {
+    tiles.push({
+      label: "Physics-vs-ML speedup",
+      value: benchmark.speedup_factor ? benchmark.speedup_factor.toFixed(2) + "×" : "—",
+      note: `Physics ${benchmark.physics_runtime_ms.toFixed(2)} ms / surrogate ${benchmark.surrogate_inference_ms_per_sample.toFixed(3)} ms/sample`,
+    });
+    tiles.push({
+      label: "Best leak classifier",
+      value: benchmark.best_classifier ? benchmark.best_classifier.name : "—",
+      note: benchmark.best_classifier ? `AUC ${benchmark.best_classifier.auc.toFixed(3)}` : "No benchmark available",
+    });
+  }
   grid.innerHTML = tiles
     .map(
       (t) => `

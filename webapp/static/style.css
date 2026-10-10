@@ -206,6 +206,12 @@ button {
 .quality-item { background: var(--panel-raised); padding: 11px 12px; display: flex; flex-direction: column; gap: 4px; }
 .quality-item span { color: var(--text-dim); font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; }
 .quality-item strong { color: var(--text); font-family: var(--font-mono); font-size: 13px; font-weight: 500; }
+.titas-status-panel { margin-bottom: var(--gap); }
+.titas-status-panel .panel-body > p { color: var(--text-muted); margin: 0; }
+.titas-status-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 1px; background: var(--hairline); margin-top: 14px; border: 1px solid var(--hairline); }
+.titas-status-item { background: var(--panel-raised); padding: 11px 12px; display: flex; flex-direction: column; gap: 4px; }
+.titas-status-item span { color: var(--text-dim); font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; }
+.titas-status-item strong { color: var(--text); font-family: var(--font-mono); font-size: 13px; font-weight: 500; }
 
 /* ------------------------------------------------------------
    Live Monitor layout

@@ -9,12 +9,14 @@
 # ============================================================
 
 import os
+import sys
 import json
 import numpy as np
 import pandas as pd
 import yaml
 from flask import Flask, Response, render_template, jsonify, request
 
+sys.path.insert(0, os.path.dirname(__file__))
 from alert_store import AlertStore
 from model_pipeline import SCADARiskModel
 from scada_adapter import prepare_scada_file
@@ -23,11 +25,25 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.dirname(BASE_DIR)
 RAW_DATA_PATH = os.path.join(PROJECT_ROOT, "data", "raw", "scada_pipeline.csv")
 REPAIRED_DATA_PATH = os.path.join(PROJECT_ROOT, "data", "processed", "scada_pipeline_repaired.csv")
-DATA_PATH = REPAIRED_DATA_PATH if os.path.exists(REPAIRED_DATA_PATH) else RAW_DATA_PATH
+PHYSICS_DATA_PATH = os.path.join(PROJECT_ROOT, "data", "processed", "physics_scada_dataset.csv")
+DATA_PATH = os.getenv("PIPELINE_RISK_DATASET_PATH", REPAIRED_DATA_PATH)
+if DATA_PATH == REPAIRED_DATA_PATH and not os.path.exists(DATA_PATH):
+    DATA_PATH = RAW_DATA_PATH
+if os.getenv("PIPELINE_RISK_USE_PHYSICS_DATA") == "1" and os.path.exists(PHYSICS_DATA_PATH):
+    DATA_PATH = PHYSICS_DATA_PATH
 CONFIG_PATH = os.path.join(PROJECT_ROOT, "config", "titas_scada.yml")
 TOPOLOGY_CONFIG_PATH = os.path.join(PROJECT_ROOT, "config", "demo_topology.yml")
+TITAS_CONTEXT_PATH = os.path.join(PROJECT_ROOT, "data", "titas", "titas_well_context.csv")
+TITAS_SENSITIVITY_PATH = os.path.join(
+    PROJECT_ROOT, "data", "titas", "titas_sensitivity_curves.csv"
+)
 PLOTS_DIR = os.path.join(BASE_DIR, "static", "img")
 MODEL_ARTIFACT_PATH = os.getenv("PIPELINE_RISK_MODEL_PATH")
+if MODEL_ARTIFACT_PATH and not os.path.isfile(MODEL_ARTIFACT_PATH):
+    raise FileNotFoundError(
+        "PIPELINE_RISK_MODEL_PATH is set but does not point to a file: "
+        f"{MODEL_ARTIFACT_PATH}"
+    )
 ALERT_DB_PATH = os.getenv(
     "PIPELINE_RISK_ALERT_DB",
     os.path.join(PROJECT_ROOT, "data", "runtime", "alerts.db"),
@@ -40,7 +56,7 @@ with open(TOPOLOGY_CONFIG_PATH, "r", encoding="utf-8") as topology_file:
 
 print("Loading and validating SCADA data...")
 raw_df, data_quality = prepare_scada_file(DATA_PATH, CONFIG_PATH, require_labels=True)
-if MODEL_ARTIFACT_PATH and os.path.exists(MODEL_ARTIFACT_PATH):
+if MODEL_ARTIFACT_PATH:
     print(f"Loading persisted model artifact: {MODEL_ARTIFACT_PATH}")
     model, model_metadata = SCADARiskModel.load_artifact(MODEL_ARTIFACT_PATH)
     model.raw_df = raw_df
@@ -120,6 +136,7 @@ def api_meta():
             "holdout_train_size": model.metrics.get("holdout_train_size"),
             "holdout_test_size": model.metrics.get("holdout_test_size"),
             "holdout_auc": model.metrics.get("holdout_auc"),
+            "holdout_average_precision": model.metrics.get("holdout_average_precision"),
             "cv_f1_mean": model.metrics.get("cv_f1_mean"),
             "cv_folds": model.metrics.get("cv_folds"),
             "anomaly_only_auc": model.metrics.get("anomaly_only_auc"),
@@ -137,7 +154,61 @@ def api_meta():
             for f, v in model.feature_importances.head(10).items()
         ],
     }
+    if os.path.exists(PHYSICS_DATA_PATH):
+        payload["benchmark"] = benchmark_surrogates(PHYSICS_DATA_PATH)
     return jsonify(_clean(payload))
+
+
+@app.route("/api/titas-status")
+def api_titas_status():
+    titas_feature_names = {
+        "tubing_area_min_in2",
+        "tubing_area_max_in2",
+        "flowline_area_min_in2",
+        "flowline_area_max_in2",
+        "depth_to_perforation_ratio",
+        "perforation_fraction_of_depth",
+        "flowline_length_to_diameter_ratio",
+        "tubing_length_to_diameter_ratio",
+        "whp_vs_historical_ratio",
+        "whp_delta_from_historical_psia",
+        "wht_delta_from_historical_f",
+        "flow_vs_historical_ratio",
+        "flow_delta_from_historical_mmscfd",
+        "expected_flow_mmscfd_backpressure",
+        "flow_residual_mmscfd",
+        "flow_residual_ratio",
+        "absolute_flow_residual_ratio",
+    }
+    model_features = set(model.feature_columns or [])
+    active_features = sorted(model_features & titas_feature_names)
+    well_id_available = "well_id" in raw_df.columns
+    context_data_available = all(
+        os.path.isfile(path) for path in (TITAS_CONTEXT_PATH, TITAS_SENSITIVITY_PATH)
+    )
+
+    if active_features:
+        status = "active"
+        message = "Titas research features are included in the trained model."
+    elif well_id_available:
+        status = "well_id_present_not_used"
+        message = "well_id is present, but no Titas features are in the trained model."
+    else:
+        status = "reference_not_mapped"
+        message = "Historical Titas reference data is available but not mapped to this SCADA dataset."
+
+    return jsonify({
+        "status": status,
+        "context_data_available": context_data_available,
+        "well_id_available": well_id_available,
+        "active_features": active_features,
+        "active_feature_count": len(active_features),
+        "flowing_bottomhole_pressure_available": (
+            "flowing_bottomhole_pressure_psia" in raw_df.columns
+        ),
+        "historical_reference_only": True,
+        "message": message,
+    })
 
 
 @app.route("/api/segments")
