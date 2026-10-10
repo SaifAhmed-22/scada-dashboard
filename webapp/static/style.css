@@ -212,6 +212,19 @@ button {
 .titas-status-item { background: var(--panel-raised); padding: 11px 12px; display: flex; flex-direction: column; gap: 4px; }
 .titas-status-item span { color: var(--text-dim); font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; }
 .titas-status-item strong { color: var(--text); font-family: var(--font-mono); font-size: 13px; font-weight: 500; }
+.titas-explorer { margin-top: 20px; padding-top: 18px; border-top: 1px solid var(--hairline); }
+.titas-explorer-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 18px; }
+.titas-explorer-head h3, .titas-scenario-title { margin: 0 0 6px; font-size: 13px; font-weight: 600; }
+.titas-explorer-head p { max-width: 680px; margin: 0; color: var(--text-dim); font-size: 11px; line-height: 1.5; }
+.titas-well-picker { min-width: 170px; display: flex; flex-direction: column; gap: 6px; color: var(--text-dim); font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; }
+.titas-well-picker select { padding: 8px 10px; color: var(--text); background: var(--panel-raised); border: 1px solid var(--hairline); border-radius: 4px; font: 12px var(--font-mono); }
+.titas-profile-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1px; margin-top: 14px; background: var(--hairline); border: 1px solid var(--hairline); }
+.titas-profile-item { display: flex; flex-direction: column; gap: 4px; padding: 10px 11px; background: var(--panel-raised); }
+.titas-profile-item span { color: var(--text-dim); font-size: 9px; text-transform: uppercase; letter-spacing: 0.04em; }
+.titas-profile-item strong { color: var(--text); font: 12px var(--font-mono); }
+.titas-scenario-title { margin-top: 18px; }
+.titas-table-wrap { max-height: 300px; }
+.titas-error { color: var(--critical); }
 
 /* ------------------------------------------------------------
    Live Monitor layout
@@ -634,6 +647,8 @@ button {
   .whatif-grid { grid-template-columns: 1fr; }
   .plots-grid { grid-template-columns: 1fr; }
   .metrics-grid { grid-template-columns: repeat(2, 1fr); }
+  .titas-explorer-head { flex-direction: column; }
+  .titas-well-picker { width: 100%; }
 }
 
 @media (max-width: 600px) {

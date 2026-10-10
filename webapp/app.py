@@ -75,7 +75,7 @@ TITAS_FEATURE_MARKERS = {
 }
 _model_feature_names = set(getattr(model, "feature_columns", []) or [])
 _titas_active_features = sorted(_model_feature_names.intersection(TITAS_FEATURE_MARKERS))
-_titas_has_well_ids = "well_id" in raw_df.columns
+_titas_has_well_ids = "well_id" in raw_df.columns and raw_df["well_id"].notna().any()
 _titas_status = {
     "installed": os.path.exists(TITAS_CONTEXT_PATH) and os.path.exists(TITAS_SENSITIVITY_PATH),
     "historical_source": "BUET Production System Analysis of the Titas Gas Field (1999)",
@@ -84,7 +84,7 @@ _titas_status = {
     "dataset_is_simulated": DATA_PATH == TITAS_SYNTHETIC_DATA_PATH,
     "dataset_rows": int(len(raw_df)),
     "well_count": int(raw_df["well_id"].nunique()) if _titas_has_well_ids else 0,
-    "well_id_column_present": _titas_has_well_ids,
+    "well_id_column_present": bool(_titas_has_well_ids),
     "active": bool(_titas_has_well_ids and _titas_active_features),
     "active_feature_count": len(_titas_active_features),
     "active_features": _titas_active_features,
@@ -125,6 +125,36 @@ def health(): return jsonify({"status": "ok", "deployment_mode": DEPLOYMENT_MODE
 
 @app.route("/api/titas-status")
 def api_titas_status(): return jsonify(_clean(_titas_status))
+
+@app.route("/api/titas-reference")
+def api_titas_reference():
+    if not os.path.exists(TITAS_CONTEXT_PATH) or not os.path.exists(TITAS_SENSITIVITY_PATH):
+        return jsonify({"error": "Titas historical reference files are unavailable."}), 503
+
+    context_columns = [
+        "well_id", "location", "sales_line", "sand_group", "well_type",
+        "completion_year", "production_start_year", "total_depth_ft",
+        "perforation_top_ft", "perforation_bottom_ft",
+        "effective_perforation_length_ft", "tubing_id_min_in", "tubing_id_max_in",
+        "total_tubing_length_ft", "flowline_id_min_in", "flowline_id_max_in",
+        "total_flowline_length_ft", "reservoir_pressure_psia",
+        "reservoir_temperature_f", "observed_whp_psia", "observed_wht_f",
+        "observed_flow_mmscfd", "simulated_whp_psia", "simulated_wht_f",
+        "simulated_flow_mmscfd",
+    ]
+    scenario_columns = [
+        "well_id", "scenario_type", "scenario_value", "whp_psia", "wht_f",
+        "flow_mmscfd", "source_table",
+    ]
+    context = pd.read_csv(TITAS_CONTEXT_PATH, usecols=context_columns)
+    scenarios = pd.read_csv(TITAS_SENSITIVITY_PATH, usecols=scenario_columns)
+    context_records = context.astype(object).where(pd.notna(context), None).to_dict(orient="records")
+    scenario_records = scenarios.astype(object).where(pd.notna(scenarios), None).to_dict(orient="records")
+    return jsonify(_clean({
+        "historical_source": _titas_status["historical_source"],
+        "wells": context_records,
+        "scenarios": scenario_records,
+    }))
 
 @app.route("/api/meta")
 def api_meta():

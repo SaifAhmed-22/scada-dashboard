@@ -274,6 +274,20 @@
     <div class="panel-body">
       <p id="titas-status-message">Checking whether Titas reference features are active...</p>
       <div class="titas-status-grid" id="titas-status-details"></div>
+      <div class="titas-explorer">
+        <div class="titas-explorer-head">
+          <div>
+            <h3>Historical well reference</h3>
+            <p>Browse the thesis reference profiles and recorded sensitivity cases. These values are historical research data, not live measurements or new model predictions.</p>
+          </div>
+          <label class="titas-well-picker" for="titas-well-select">Reference well
+            <select id="titas-well-select" disabled><option>Loading wells...</option></select>
+          </label>
+        </div>
+        <div id="titas-well-profile"><p class="empty-state">Loading historical reference data...</p></div>
+        <h4 class="titas-scenario-title">Recorded sensitivity cases for this well</h4>
+        <div class="table-wrap titas-table-wrap" id="titas-scenarios"></div>
+      </div>
     </div>
   </div>
 

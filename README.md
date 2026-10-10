@@ -88,6 +88,8 @@ py webapp\app.py
 
 The back-pressure relation is used only when explicit flowing bottomhole pressure is available. Pipeline pressure is not silently substituted for bottomhole pressure.
 
+The Model Performance view reports whether Titas features are active for the selected dataset and provides a selectable browser for the historical well profiles and recorded sensitivity cases. Historical values are for research reference only; they are not live SCADA readings or new model predictions. The checked-in legacy demo has no well IDs, so the Titas reference browser can be populated while its Titas model-feature count remains zero.
+
 For the publication experiment, compare:
 
 1. SCADA-only baseline.
