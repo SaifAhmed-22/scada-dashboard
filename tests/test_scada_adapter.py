@@ -21,6 +21,7 @@ class ScadaAdapterTests(unittest.TestCase):
             {
                 "timestamp": ["2024-01-01 00:00:00"],
                 "segment_id": [1],
+                "well_id": ["TT-1"],
                 "pressure": [70],
                 "flow_rate": [4],
                 "temperature": [30],
@@ -30,6 +31,10 @@ class ScadaAdapterTests(unittest.TestCase):
                 "compressor_state": [1],
                 "energy_consumption": [20],
                 "target": [0],
+                "wellhead_pressure_psia": [2415],
+                "wellhead_temperature_f": [150],
+                "flow_rate_mmscfd": [23.4],
+                "flowing_bottomhole_pressure_psia": [2000],
             }
         )
         normalized, report = normalize_scada_frame(frame, self.config, require_labels=True)
@@ -50,6 +55,7 @@ class ScadaAdapterTests(unittest.TestCase):
             {
                 "timestamp": ["2024-01-01 00:00:00", "2024-01-01 00:01:00"],
                 "segment_id": [1, 1],
+                "well_id": ["TT-1", "TT-1"],
                 "p_psi": [100, 5000],
                 "q_m3h": [3600, 3600],
                 "temperature": [30, 30],
@@ -59,6 +65,10 @@ class ScadaAdapterTests(unittest.TestCase):
                 "compressor_state": [1, 1],
                 "energy_consumption": [20, 20],
                 "target": [0, 0],
+                "wellhead_pressure_psia": [2415, 2415],
+                "wellhead_temperature_f": [150, 150],
+                "flow_rate_mmscfd": [23.4, 23.4],
+                "flowing_bottomhole_pressure_psia": [2000, 2000],
             }
         )
         normalized, report = normalize_scada_frame(frame, config, require_labels=True)

@@ -1,16 +1,13 @@
 import unittest
-import pandas as pd
-
 from pathlib import Path
 import sys
+
+import pandas as pd
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT / "webapp"))
 
-from titas_context import (
-    add_titas_context_features,
-    backpressure_expected_flow_mmscfd,
-)
+from titas_context import add_titas_context_features, backpressure_expected_flow_mmscfd
 
 
 class TitasContextTests(unittest.TestCase):
@@ -33,9 +30,7 @@ class TitasContextTests(unittest.TestCase):
             add_titas_context_features(frame)
 
     def test_backpressure_formula(self):
-        q = backpressure_expected_flow_mmscfd(
-            3350.0, 3000.0, 0.0006, 0.80
-        )
+        q = backpressure_expected_flow_mmscfd(3350.0, 3000.0, 0.0006, 0.80)
         self.assertGreater(float(q), 0.0)
 
 

@@ -1,21 +1,19 @@
-"""Titas-specific context and physics-informed features.
+"""Titas-specific historical context and physics-informed features.
 
-This module is intentionally non-invasive: it adds features only when the
-input SCADA dataframe contains a `well_id` column (or when the caller
-provides a well mapping). It never invents a segment->well mapping.
+Historical Titas values in this module come from the 1999 BUET thesis
+"Production System Analysis of the Titas Gas Field" and are reference
+context, not current operating setpoints.
 
-Historical Titas values in this module come from the 1999 BUET thesis and
-must be treated as historical/reference context rather than current operating
-setpoints.
+The module requires an explicit `well_id` (TT-1 ... TT-11) and never infers a
+segment-to-well mapping. The historical back-pressure equation is exposed only
+for cases where flowing bottomhole pressure is explicitly available.
 """
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Optional
 
 import numpy as np
 import pandas as pd
-
 
 PACKAGE_ROOT = Path(__file__).resolve().parents[1]
 CONTEXT_PATH = PACKAGE_ROOT / "data" / "titas" / "titas_well_context.csv"
@@ -36,25 +34,7 @@ def add_titas_context_features(
     well_id_col: str = "well_id",
     context_path: str | Path = CONTEXT_PATH,
 ) -> pd.DataFrame:
-    """Join static Titas well context and derive normalized static features.
-
-    Required input:
-        `well_id` identifying TT-1 ... TT-11.
-
-    Derived features include geometry ratios that do not require an assumption
-    about current operating units:
-        - tubing_area_min/max_in2
-        - flowline_area_min/max_in2
-        - depth_to_perforation_ratio
-        - perforation_fraction_of_depth
-        - flowline_length_to_diameter_ratio
-        - tubing_length_to_diameter_ratio
-
-    Also adds historical baseline comparison fields when matching columns exist:
-        - whp_vs_historical_ratio
-        - wht_delta_from_historical_f
-        - flow_vs_historical_ratio
-    """
+    """Join documented well context and derive normalized geometry/baseline features."""
     if well_id_col not in df.columns:
         raise ValueError(
             f"Missing '{well_id_col}'. Do not infer a segment-to-well mapping; "
@@ -72,8 +52,10 @@ def add_titas_context_features(
         "safety_valve_depth_ft", "reservoir_pressure_psia",
         "reservoir_temperature_f", "backpressure_C", "backpressure_n",
         "observed_whp_psia", "observed_wht_f", "observed_flow_mmscfd",
+        "simulated_whp_psia", "simulated_wht_f", "simulated_flow_mmscfd",
     ]
     context = context[join_cols].drop_duplicates("well_id")
+
     out = df.copy()
     out[well_id_col] = out[well_id_col].astype(str)
     context["well_id"] = context["well_id"].astype(str)
@@ -88,7 +70,6 @@ def add_titas_context_features(
     if well_id_col != "well_id":
         out = out.drop(columns=["well_id"])
 
-    # Geometry features.
     out["tubing_area_min_in2"] = np.pi * (out["tubing_id_min_in"] ** 2) / 4.0
     out["tubing_area_max_in2"] = np.pi * (out["tubing_id_max_in"] ** 2) / 4.0
     out["flowline_area_min_in2"] = np.pi * (out["flowline_id_min_in"] ** 2) / 4.0
@@ -100,16 +81,18 @@ def add_titas_context_features(
         out["effective_perforation_length_ft"] / out["total_depth_ft"]
     )
     out["flowline_length_to_diameter_ratio"] = (
-        out["total_flowline_length_ft"] / out["flowline_id_min_in"].replace(0, np.nan)
+        out["total_flowline_length_ft"] /
+        out["flowline_id_min_in"].replace(0, np.nan)
     )
     out["tubing_length_to_diameter_ratio"] = (
-        out["total_tubing_length_ft"] / out["tubing_id_min_in"].replace(0, np.nan)
+        out["total_tubing_length_ft"] /
+        out["tubing_id_min_in"].replace(0, np.nan)
     )
 
-    # Historical baseline features; only computed for columns explicitly supplied by caller.
     if "wellhead_pressure_psia" in out.columns:
         out["whp_vs_historical_ratio"] = (
-            out["wellhead_pressure_psia"] / out["observed_whp_psia"].replace(0, np.nan)
+            out["wellhead_pressure_psia"] /
+            out["observed_whp_psia"].replace(0, np.nan)
         )
         out["whp_delta_from_historical_psia"] = (
             out["wellhead_pressure_psia"] - out["observed_whp_psia"]
@@ -120,7 +103,8 @@ def add_titas_context_features(
         )
     if "flow_rate_mmscfd" in out.columns:
         out["flow_vs_historical_ratio"] = (
-            out["flow_rate_mmscfd"] / out["observed_flow_mmscfd"].replace(0, np.nan)
+            out["flow_rate_mmscfd"] /
+            out["observed_flow_mmscfd"].replace(0, np.nan)
         )
         out["flow_delta_from_historical_mmscfd"] = (
             out["flow_rate_mmscfd"] - out["observed_flow_mmscfd"]
@@ -135,18 +119,11 @@ def backpressure_expected_flow_mmscfd(
     C,
     n,
 ):
-    """Historical back-pressure equation from the thesis:
-       Qsc = C * (PR^2 - Pwf^2)^n
-
-    This is only valid when the pressures are compatible with the equation's
-    definitions. Do not substitute wellhead pressure for flowing bottomhole
-    pressure without a separate pressure-drop model.
-    """
+    """Historical thesis equation: Qsc = C * (PR^2 - Pwf^2)^n."""
     pr = np.asarray(reservoir_pressure_psia, dtype=float)
     pwf = np.asarray(flowing_bottomhole_pressure_psia, dtype=float)
     c = np.asarray(C, dtype=float)
     exponent = np.asarray(n, dtype=float)
-
     drawdown_term = np.maximum(pr**2 - pwf**2, 0.0)
     return c * np.power(drawdown_term, exponent)
 
@@ -160,7 +137,7 @@ def add_backpressure_features(
     n_col: str = "backpressure_n",
     observed_flow_col: str = "flow_rate_mmscfd",
 ) -> pd.DataFrame:
-    """Add physics residuals only when bottomhole pressure is available."""
+    """Add physics residuals when all required pressure/flow terms exist."""
     required = [
         reservoir_pressure_col,
         flowing_bottomhole_pressure_col,
@@ -170,9 +147,7 @@ def add_backpressure_features(
     ]
     missing = [c for c in required if c not in df.columns]
     if missing:
-        raise ValueError(
-            "Back-pressure features require: " + ", ".join(missing)
-        )
+        raise ValueError("Back-pressure features require: " + ", ".join(missing))
 
     out = df.copy()
     out["expected_flow_mmscfd_backpressure"] = backpressure_expected_flow_mmscfd(
@@ -185,72 +160,6 @@ def add_backpressure_features(
     out["flow_residual_mmscfd"] = (
         out[observed_flow_col] - out["expected_flow_mmscfd_backpressure"]
     )
-    out["flow_residual_ratio"] = (
-        out["flow_residual_mmscfd"] / expected
-    )
+    out["flow_residual_ratio"] = out["flow_residual_mmscfd"] / expected
     out["absolute_flow_residual_ratio"] = out["flow_residual_ratio"].abs()
-    return out
-
-
-def expected_flow_from_sensitivity(
-    df: pd.DataFrame,
-    *,
-    scenario_type: str,
-    scenario_value_col: str,
-    well_id_col: str = "well_id",
-    target_flow_col: str = "flow_rate_mmscfd",
-    sensitivity_path: str | Path = SENSITIVITY_PATH,
-) -> pd.DataFrame:
-    """Attach the nearest documented thesis sensitivity scenario.
-
-    This is an empirical historical lookup, not a physics solver. The caller
-    supplies the scenario variable (e.g. reservoir pressure or sales-line
-    pressure). Nearest-neighbour matching avoids inventing interpolation.
-    """
-    for col in [well_id_col, scenario_value_col]:
-        if col not in df.columns:
-            raise ValueError(f"Missing '{col}'")
-    sens = load_titas_sensitivity(sensitivity_path)
-    sens = sens[sens["scenario_type"] == scenario_type].copy()
-    if sens.empty:
-        raise ValueError(f"No sensitivity data for scenario_type={scenario_type!r}")
-
-    left = df.copy()
-    left["_row_id"] = np.arange(len(left))
-    right = sens[["well_id", "scenario_value", "flow_mmscfd", "whp_psia", "wht_f"]].copy()
-    left[well_id_col] = left[well_id_col].astype(str)
-    right["well_id"] = right["well_id"].astype(str)
-
-    rows = []
-    for _, row in left.iterrows():
-        candidates = right[right["well_id"] == str(row[well_id_col])]
-        if candidates.empty or pd.isna(row[scenario_value_col]):
-            rows.append({
-                "_row_id": row["_row_id"],
-                "historical_expected_flow_mmscfd": np.nan,
-                "historical_expected_whp_psia": np.nan,
-                "historical_expected_wht_f": np.nan,
-                "historical_scenario_value_used": np.nan,
-            })
-            continue
-        idx = (candidates["scenario_value"] - float(row[scenario_value_col])).abs().idxmin()
-        best = candidates.loc[idx]
-        rows.append({
-            "_row_id": row["_row_id"],
-            "historical_expected_flow_mmscfd": best["flow_mmscfd"],
-            "historical_expected_whp_psia": best["whp_psia"],
-            "historical_expected_wht_f": best["wht_f"],
-            "historical_scenario_value_used": best["scenario_value"],
-        })
-
-    match = pd.DataFrame(rows)
-    out = left.merge(match, on="_row_id", how="left").drop(columns=["_row_id"])
-    if target_flow_col in out.columns:
-        expected = out["historical_expected_flow_mmscfd"].replace(0, np.nan)
-        out["historical_flow_residual_mmscfd"] = (
-            out[target_flow_col] - out["historical_expected_flow_mmscfd"]
-        )
-        out["historical_flow_residual_ratio"] = (
-            out["historical_flow_residual_mmscfd"] / expected
-        )
     return out

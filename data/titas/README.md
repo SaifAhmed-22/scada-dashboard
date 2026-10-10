@@ -1,8 +1,7 @@
-# Titas historical context data
+# Titas historical context
 
-Source: *Production System Analysis of the Titas Gas Field*, BUET, 1999.
+Source: *Production System Analysis of the Titas Gas Field* (BUET, 1999), supplied by the project owner.
 
-These files are historical/reference inputs extracted from the supplied thesis.
-Do not use them as current Titas operating specifications without validation.
+`titas_well_context.csv` contains historical well-level context used by the optional research model integration.
 
-The context file is keyed by `well_id` (TT-1 ... TT-11).
+Important: these values are historical/reference values. They are not current Titas operating setpoints. The ML pipeline requires an explicit `well_id` and does not infer `segment_id -> well_id` mappings.

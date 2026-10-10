@@ -1,7 +1,8 @@
 # Titas SCADA integration contract.
-# Replace the source tag names and units with the historian/interface specification
-# before connecting live data. The current values keep the sample dataset runnable.
-schema_version: 1
+# The synthetic research dataset includes explicit well identity and physics
+# variables. Replace source tags/units with the historian specification before
+# connecting live data; never infer field well identity from segment numbers.
+schema_version: 2
 timezone: Asia/Dhaka
 expected_frequency: 1min
 resample: false
@@ -9,6 +10,7 @@ resample: false
 columns:
   timestamp: timestamp
   segment_id: segment_id
+  well_id: well_id
   pressure: pressure
   flow_rate: flow_rate
   temperature: temperature
@@ -20,6 +22,10 @@ columns:
   alarm_triggered: alarm_triggered
   event_type: event_type
   target: target
+  wellhead_pressure_psia: wellhead_pressure_psia
+  wellhead_temperature_f: wellhead_temperature_f
+  flow_rate_mmscfd: flow_rate_mmscfd
+  flowing_bottomhole_pressure_psia: flowing_bottomhole_pressure_psia
 
 units:
   pressure: {source: bar, target: bar}
@@ -27,6 +33,10 @@ units:
   temperature: {source: C, target: C}
   pump_speed: {source: rpm, target: rpm}
   energy_consumption: {source: kW, target: kW}
+  wellhead_pressure_psia: {source: psia, target: psia}
+  wellhead_temperature_f: {source: F, target: F}
+  flow_rate_mmscfd: {source: Mmscfd, target: Mmscfd}
+  flowing_bottomhole_pressure_psia: {source: psia, target: psia}
 
 ranges:
   pressure: {min: 0, max: 250}
@@ -38,10 +48,15 @@ ranges:
   pump_state: {allowed: [0, 1]}
   compressor_state: {allowed: [0, 1]}
   alarm_triggered: {allowed: [0, 1]}
+  wellhead_pressure_psia: {min: 0, max: 5000}
+  wellhead_temperature_f: {min: -100, max: 500}
+  flow_rate_mmscfd: {min: 0, max: 200}
+  flowing_bottomhole_pressure_psia: {min: 0, max: 5000}
 
 required_for_training:
   - timestamp
   - segment_id
+  - well_id
   - pressure
   - flow_rate
   - temperature
@@ -51,10 +66,15 @@ required_for_training:
   - compressor_state
   - energy_consumption
   - target
+  - wellhead_pressure_psia
+  - wellhead_temperature_f
+  - flow_rate_mmscfd
+  - flowing_bottomhole_pressure_psia
 
 required_for_inference:
   - timestamp
   - segment_id
+  - well_id
   - pressure
   - flow_rate
   - temperature
@@ -63,3 +83,7 @@ required_for_inference:
   - pump_speed
   - compressor_state
   - energy_consumption
+  - wellhead_pressure_psia
+  - wellhead_temperature_f
+  - flow_rate_mmscfd
+  - flowing_bottomhole_pressure_psia

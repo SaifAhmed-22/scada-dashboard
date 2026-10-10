@@ -2,18 +2,13 @@
 
 **Project:** Titas SCADA Pipeline Risk Assessment
 **Repository:** `SaifAhmed-22/scada-dashboard`
-**Last reviewed:** 2026-10-11
+**Review date:** 2026-10-11
 
 ## Executive status
 
-The repository contains a Flask demo dashboard, its SCADA risk model, separate
-research utilities, and historical Titas reference data. The research helpers
-are not wired into dashboard training or inference. The demo dataset has no
-approved `well_id` mapping, so the dashboard reports Titas as **REFERENCE / NOT
-MAPPED** and uses zero Titas features.
+The repository has been consolidated around one importable ML pipeline and an optional Titas historical/context layer. The Titas integration has been merged into `main`. The repository separates source data, processed data, Titas reference data, configuration, documentation, scripts, tests, artifacts, and the Flask application.
 
-The dashboard reports the Titas layer status and labels the dataset as a
-historical demo replay rather than live SCADA.
+The dashboard now exposes a **Titas Research / Physics Layer** status panel so that installation, well-ID availability, active feature count, and the BHP requirement are visible rather than silently hidden.
 
 ## What was completed
 
@@ -21,16 +16,15 @@ historical demo replay rather than live SCADA.
 
 - Centralized the model implementation in `webapp/model_pipeline.py`.
 - Preserved the existing time-series feature engineering and Flask inference path.
-- Added separate research helpers for Titas context, geometry, historical
-  baseline comparisons, and the documented back-pressure equation. These are
-  not currently used to train or serve the dashboard model.
-- The dashboard model's Isolation Forest `contamination` is currently set from
-  `auto`, independently of training labels.
-- The model reports ROC-AUC, average precision (PR-AUC), F1-related metrics,
-  and confusion matrix on its chronological holdout. Cross-validation folds are
-  grouped by timestamp so rows from one instant are not split across folds.
-- The reproducible training report records hashes for the data and config,
-  evaluation window, model settings, and package versions.
+- Added optional Titas context features when an explicit `well_id` is supplied.
+- Added historical baseline deviation features for pressure, temperature, and flow.
+- Added Titas well geometry features for tubing, flowline, depth, and perforation characteristics.
+- Added the thesis back-pressure equation only when explicit flowing bottomhole pressure is available.
+- Changed Isolation Forest to `contamination="auto"` so the unsupervised detector no longer derives contamination from the target labels.
+- Added average-precision/PR-AUC support in the core model metrics.
+- Grouped chronological cross-validation by timestamp so readings from the same instant cannot be split between training and validation.
+- Added holdout cutoff/start/end timestamps and expanded the training manifest with data/config hashes, model settings, and package versions.
+- Added an alarm-feature ablation utility. Its results measure sensitivity to that input; they do not by themselves prove temporal leakage or real-world performance.
 
 ### Titas research layer
 
@@ -44,26 +38,17 @@ historical demo replay rather than live SCADA.
 
 ### Dashboard integration
 
+- `/api/meta` now exposes Titas-layer status.
 - `/api/titas-status` provides a dedicated machine-readable status endpoint.
-- The Model Performance view reports whether reference files are available,
-  whether the SCADA dataset has `well_id`, and whether any Titas features are
-  included in the trained model.
-- The current demo status is **REFERENCE / NOT MAPPED**. The Titas feature
-  utilities are not wired into the dashboard training or inference pipeline.
-- The header identifies the app as a historical demo replay, not a live SCADA
-  monitor.
+- The Model Performance view displays a Titas Research / Physics Layer panel.
+- The panel distinguishes **ACTIVE** from **REFERENCE / NOT MAPPED**.
+- The panel explicitly shows whether the current SCADA data contains `well_id` and how many Titas features are active.
 
 ### Repository cleanup
 
-- `scripts/scada_risk_model.py` and `webapp/model_pipeline.py` are both present.
-  The former is a separate exploratory implementation; the Flask app uses the
-  latter. Use `scripts/train_model.py` for validated artifact training on the
-  dashboard model implementation.
-- `scripts/create_project_guide.py` is present and regenerates the checked-in
-  Word guide; it requires `python-docx`.
-- Research PDFs and Markdown text extractions are retained together for source
-  fidelity and searchable text; neither format is considered redundant by
-  default.
+- Removed the obsolete duplicate standalone `scripts/scada_risk_model.py` implementation.
+- Removed the generated-document helper `scripts/create_project_guide.py` from runtime scripts; the existing guide document remains available under `docs/`.
+- Reworked the root README around the research architecture and reproducible workflow.
 
 ## Current architecture
 
@@ -79,10 +64,11 @@ Per-segment chronological features
         +------------------------------+
         |                              |
         v                              v
-Historical Titas research       Existing SCADA features
-utilities (separate path)                |
-                                       v
-                               Model feature matrix
+Titas context (optional)        Existing SCADA features
+        |                              |
+        +--------------+---------------+
+                       v
+               Model feature matrix
                        |
           +------------+------------+
           |                         |
@@ -101,8 +87,7 @@ utilities (separate path)                |
 1. No `segment_id -> TT-*` mapping is inferred. An approved `well_id` field/mapping is required.
 2. Historical 1999 Titas values are not represented as current operating specifications.
 3. Pipeline pressure is not silently substituted for flowing bottomhole pressure in the back-pressure equation.
-4. Isolation Forest uses `contamination="auto"` and does not derive its
-   threshold from target-label prevalence.
+4. The anomaly detector does not use target labels to set its contamination parameter.
 5. Chronological evaluation is retained to reduce future-information leakage.
 6. Data-quality flags remain outside the model feature matrix so invalid sensor readings are not automatically treated as physical leak signatures.
 
@@ -110,7 +95,7 @@ utilities (separate path)                |
 
 ### Blocker 1 — authoritative well mapping
 
-The current demo SCADA contract is keyed by `segment_id`. To activate Titas context on real SCADA rows, obtain an authoritative `segment_id -> well_id` or equivalent asset/historian mapping.
+The checked-in historical demo is keyed by `segment_id` and has no `well_id`. The generated research simulation pairs segment and well IDs by construction, but that synthetic pairing is not a field mapping. Real SCADA requires an authoritative `segment_id -> well_id` or equivalent asset/historian mapping.
 
 ### Blocker 2 — real field labels
 
@@ -134,26 +119,6 @@ Run three controlled configurations on exactly the same chronological splits:
 | B — Context | SCADA + Titas static/context features |
 | C — Physics-informed | SCADA + Titas context + validated physics residuals |
 
-The current app implements baseline SCADA features only. The optional
-`scripts/feature_ablation.py` utility compares the model with and without
-`alarm_triggered`; this sensitivity check is a demo-data diagnostic, not a
-complete research ablation or proof of temporal leakage.
-
-On the checked-in 1,000-row demo data (SHA-256
-`d067b610ab0acf045d959a9a3588f051b9f53b0167357e4610f1cd7b73bc909d`), using
-the same chronological holdout for both runs:
-
-| Configuration | ROC-AUC | Average precision | Precision | Recall | F1 |
-|---|---:|---:|---:|---:|---:|
-| All features | 0.993 | 0.985 | 1.000 | 0.907 | 0.951 |
-| Without `alarm_triggered` | 0.993 | 0.983 | 1.000 | 0.791 | 0.883 |
-
-`alarm_triggered` was the top feature in the all-feature fit (importance
-0.485). Removing it reduced recall and F1 on this demo split, while ROC-AUC and
-average precision changed very little. This establishes sensitivity to that
-input, not temporal leakage: its timing/generation semantics must be checked
-against real historian data before using it for early warning.
-
 Report:
 
 - F1
@@ -172,9 +137,9 @@ The key research claim should be conditional on the experiment: **whether field-
 
 **Software organization:** Good after consolidation.
 **Research architecture:** Good foundation.
-**Titas integration:** Research utilities are implemented but are not wired into the dashboard model; authoritative well IDs are still required.
+**Titas integration:** Implemented but intentionally conditional on authoritative well IDs.
 **Physics integration:** Partially implemented; requires validated flowing BHP for residual features.
-**Dashboard observability:** The UI labels the app as a historical demo and reports whether Titas reference data is available and whether Titas features are active.
+**Dashboard observability:** Improved; the live UI now reports whether the Titas layer is installed and whether it is actually active.
 **Reproducibility:** Good structure; final paper still needs pinned environment/version metadata and experiment manifests.
 **Publication readiness:** Not yet sufficient for a performance claim until real/validated data, labeling, ablation results, and leakage checks are completed.
 

@@ -1,6 +1,6 @@
-# Historical Titas gas properties extracted from the thesis.
-# Source: Production System Analysis of the Titas Gas Field (BUET, 1999).
-# These are historical/reference values, not current 2026 operating specifications.
+# Historical Titas gas properties extracted from the supplied BUET thesis.
+# Source: Production System Analysis of the Titas Gas Field (1999).
+# Historical/reference values only; not current 2026 operating specifications.
 
 gas_gravity_air_basis: 0.584
 critical_pressure_psia: 669.6

@@ -19,11 +19,10 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 WEBAPP_DIR = PROJECT_ROOT / "webapp"
 sys.path.insert(0, str(WEBAPP_DIR))
 
-from model_pipeline import RANDOM_STATE, SCADARiskModel  # noqa: E402
+from model_pipeline import SCADARiskModel  # noqa: E402
 from scada_adapter import prepare_scada_file  # noqa: E402
 
-
-DEFAULT_DATA = PROJECT_ROOT / "data" / "processed" / "scada_pipeline_repaired.csv"
+DEFAULT_DATA = PROJECT_ROOT / "data" / "raw" / "titas_synthetic_scada.csv"
 DEFAULT_CONFIG = PROJECT_ROOT / "config" / "titas_scada.yml"
 DEFAULT_MODEL = PROJECT_ROOT / "artifacts" / "models" / "pipeline_risk_model.pkl"
 DEFAULT_METRICS = PROJECT_ROOT / "artifacts" / "models" / "pipeline_risk_metrics.json"
@@ -50,32 +49,30 @@ def main() -> None:
     parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG)
     parser.add_argument("--model", type=Path, default=DEFAULT_MODEL)
     parser.add_argument("--metrics", type=Path, default=DEFAULT_METRICS)
-    parser.add_argument(
-        "--allow-collisions",
-        action="store_true",
-        help="Train despite same-segment timestamp collisions; use only after source review.",
-    )
+    parser.add_argument("--allow-collisions", action="store_true")
     args = parser.parse_args()
 
+    if not args.data.exists():
+        raise FileNotFoundError(
+            f"Dataset not found: {args.data}. Run scripts/generate_titas_simulation.py first."
+        )
     frame, quality = prepare_scada_file(args.data, args.config, require_labels=True)
     collisions = quality.get("timestamp_collision_rows", 0)
     if collisions and not args.allow_collisions:
         raise ValueError(
-            f"Refusing to train: {collisions} rows belong to ambiguous same-segment "
-            "timestamps. Repair the source data or rerun with --allow-collisions "
-            "after review."
+            f"Refusing to train: {collisions} rows belong to ambiguous same-segment timestamps."
         )
     if frame["target"].nunique() < 2:
         raise ValueError("Training data must contain both target classes")
 
     model = SCADARiskModel().fit(frame)
-    holdout_metrics = model.metrics
     metadata = {
         "trained_at": datetime.now(timezone.utc).isoformat(),
         "data_path": str(args.data),
         "data_sha256": file_sha256(args.data),
         "config_path": str(args.config),
         "config_sha256": file_sha256(args.config),
+        "dataset_status": "simulated_titas_research_data",
         "rows_used": len(frame),
         "data_quality": quality,
         "model_features": model.feature_columns,
@@ -87,17 +84,13 @@ def main() -> None:
                 "contamination": model.iso_forest.contamination,
                 "random_state": model.iso_forest.random_state,
             },
-            "random_state": RANDOM_STATE,
-            "feature_columns": model.feature_columns,
         },
         "evaluation": {
             "split_method": "chronological holdout; CV folds grouped by timestamp",
-            "holdout_cutoff_timestamp": holdout_metrics["holdout_cutoff_timestamp"],
-            "holdout_start_timestamp": holdout_metrics["holdout_start_timestamp"],
-            "holdout_end_timestamp": holdout_metrics["holdout_end_timestamp"],
-            "holdout_train_size": holdout_metrics["holdout_train_size"],
-            "holdout_test_size": holdout_metrics["holdout_test_size"],
-            "metrics": holdout_metrics,
+            "holdout_cutoff_timestamp": model.metrics.get("holdout_cutoff_timestamp"),
+            "holdout_start_timestamp": model.metrics.get("holdout_start_timestamp"),
+            "holdout_end_timestamp": model.metrics.get("holdout_end_timestamp"),
+            "metrics": model.metrics,
         },
         "environment": {
             "python": sys.version.split()[0],
@@ -112,16 +105,17 @@ def main() -> None:
                 "PyYAML": installed_version("PyYAML"),
             },
         },
+        "metrics": model.metrics,
     }
     model.save_artifact(args.model, metadata)
     args.metrics.parent.mkdir(parents=True, exist_ok=True)
     args.metrics.write_text(json.dumps(metadata, indent=2, default=str), encoding="utf-8")
 
     print(f"Validated rows: {len(frame)}")
+    print(f"Wells: {frame['well_id'].nunique()}")
     print(f"Invalid rate: {quality['invalid_rate']:.2%}")
     print(f"Holdout AUC: {model.metrics.get('holdout_auc')}")
     print(f"Saved model: {args.model}")
-    print(f"Saved metrics: {args.metrics}")
 
 
 if __name__ == "__main__":

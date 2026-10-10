@@ -51,7 +51,7 @@ def evaluate(frame: pd.DataFrame) -> dict:
         ],
         "metrics": {
             "holdout_auc": model.metrics["holdout_auc"],
-            "holdout_average_precision": model.metrics["holdout_average_precision"],
+            "holdout_average_precision": model.metrics["holdout_pr_auc"],
             "positive_class_precision": report["1"]["precision"],
             "positive_class_recall": report["1"]["recall"],
             "positive_class_f1": report["1"]["f1-score"],
@@ -72,7 +72,7 @@ def main() -> None:
     parser.add_argument(
         "--data",
         type=Path,
-        default=PROJECT_ROOT / "data" / "processed" / "scada_pipeline_repaired.csv",
+        default=PROJECT_ROOT / "data" / "raw" / "titas_synthetic_scada.csv",
     )
     parser.add_argument(
         "--config",
